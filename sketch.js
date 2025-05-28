@@ -148,9 +148,9 @@ function draw() {
   text(feedback, width / 2, height - 10);
 
   // 繪製偵測到的臉部關鍵點 (用於除錯，可移除)
-  // drawDetections();
+   drawDetections();
   // 繪製偵測到的手部關鍵點 (用於除錯，可移除)
-  // drawHands();
+   drawHands();
 
   // 顯示打勾或打叉的視覺回饋
   if (showCorrectionMark) {
