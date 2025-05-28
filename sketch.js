@@ -42,8 +42,16 @@ const mouthPoints = [
   76, 77, 90, 180, 85, 16, 315, 404, 320, 307, 306, 408, 304, 303, 302, 11, 72, 73, 74, 184  // 上下唇內側
 ];
 
+// **** 新增：偵測頻率控制變數 ****
+let lastFaceDetectTime = 0;
+let faceDetectInterval = 200; // 每 200 毫秒進行一次人臉偵測 (約 5 FPS)
+
+let lastHandDetectTime = 0;
+let handDetectInterval = 100; // 每 100 毫秒進行一次手勢偵測 (約 10 FPS)
+
+
 function setup() {
-  createCanvas(640, 480);
+  createCanvas(640, 480); // 可以考慮降低解析度到 320x240 來提升效能
   video = createCapture(VIDEO, videoReady);
   video.size(width, height);
   video.hide();
@@ -66,8 +74,7 @@ function showStartScreen() {
   background(220);
   fill(0);
   textSize(32);
-  text("準備開始...", width / 2, height / 2 - 50); // 保留主要提示
-  // 移除與攝影機權限相關的提示文字
+  text("準備開始...", width / 2, height / 2 - 50);
 
   let startButton = select('#startButton');
   if (startButton) {
@@ -93,17 +100,16 @@ function videoReady() {
 
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
     console.log("FaceAPI ready!");
-    faceapi.detect(gotFace);
+    // **** 修改：不再直接呼叫 detect，改為在 draw 中受控呼叫 ****
     checkModelsLoaded();
   });
 
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
+    // **** 修改：不再直接設定 on("predict")，改為在 draw 中受控呼叫 ****
     checkModelsLoaded();
   });
-  handpose.on("predict", (results) => {
-    hands = results;
-  });
+  // handpose.on("predict", (results) => { hands = results; }); // 這行會被移除或修改
 }
 
 function checkModelsLoaded() {
@@ -116,15 +122,14 @@ function checkModelsLoaded() {
   }
 }
 
-
 function startGame() {
   if (!gameModelsLoaded) {
     feedback = "請等待 AI 模型載入完成！";
     return;
   }
-  // 移除攝影機需要權限的提示，直接檢查是否偵測到物件
+  // 檢查是否有偵測到物件，而不是直接提示權限
   if (detections.length === 0 && hands.length === 0) {
-      feedback = "請將臉部或手部對準攝影機後再點擊開始！"; // 提示對準畫面
+      feedback = "請將臉部或手部對準攝影機後再點擊開始！";
       return; // 如果沒有偵測到任何東西，不啟動遊戲
   }
 
@@ -185,6 +190,21 @@ function draw() {
   textSize(22);
   text(feedback, width / 2, height - 10);
 
+  // **** 優化點 1：限制人臉偵測頻率 ****
+  if (faceapi && gameModelsLoaded && (millis() - lastFaceDetectTime > faceDetectInterval)) {
+    faceapi.detect(gotFace);
+    lastFaceDetectTime = millis();
+  }
+
+  // **** 優化點 2：限制手勢偵測頻率 ****
+  if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
+    handpose.predict(video).then(results => {
+      hands = results;
+    });
+    lastHandDetectTime = millis();
+  }
+
+  // 偵測與判斷
   if (!actionCheckedForCurrentName) {
     checkAction();
   }
@@ -257,7 +277,8 @@ function gotFace(err, result) {
   if (result) {
     detections = result;
   }
-  faceapi.detect(gotFace);
+  // FaceAPI 的 detect() 函數內部會持續偵測，所以這裡不用再呼叫 detect()
+  // 它的偵測頻率現在由 draw 函數中的 if 條件控制
 }
 
 // 檢查玩家動作並更新分數和回饋
@@ -314,8 +335,8 @@ function checkAction() {
               feedback = "請做出正確的動作！";
           }
       } else {
-          // 如果連臉和手都沒偵測到
-          feedback = "偵測中...請對準攝影機！"; // 這是最後的提示，無法避免
+          // 如果連臉和手都沒偵測到 (這是一個基礎的偵測不到提示，與權限無關)
+          feedback = "偵測中...請對準攝影機！";
       }
   }
 }
@@ -339,8 +360,9 @@ function isOpenMouth() {
       let innerVerticalDist = dist(innerTopLip._x, innerTopLip._y, innerBottomLip._x, innerBottomLip._y);
       let outerVerticalDist = dist(outerTopLip._x, outerTopLip._y, outerBottomLip._x, outerBottomLip._y);
 
-      const OPEN_MOUTH_THRESHOLD_INNER = 15; // 內唇垂直距離至少要大於15像素
-      const OPEN_MOUTH_THRESHOLD_OUTER = 25; // 外唇垂直距離至少要大於25像素
+      // 這些閾值可能需要根據實際測試調整
+      const OPEN_MOUTH_THRESHOLD_INNER = 15; 
+      const OPEN_MOUTH_THRESHOLD_OUTER = 25; 
 
       return innerVerticalDist > OPEN_MOUTH_THRESHOLD_INNER &&
              outerVerticalDist > OPEN_MOUTH_THRESHOLD_OUTER;
