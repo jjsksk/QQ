@@ -19,6 +19,14 @@ let boxPulse = 0;
 
 function setup() {
   createCanvas(640, 480);
+   // 啟用攝影機
+  video = createCapture(VIDEO);
+  video.size(width, height);
+  video.hide();
+
+  // 印出 video 物件到 Console，確認攝影機有啟動
+  console.log(video);
+  // 初始化 ml5 的 FaceAPI 和 Handpose 模型
   video = createCapture(VIDEO);
   video.size(width, height);
   video.hide();
