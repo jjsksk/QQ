@@ -206,7 +206,7 @@ function draw() {
     }
   }
 
-  // 時間到自動換名字，不再因為未回應而扣分
+ // 時間到自動換名字，不再因為未回應而扣分
   if (millis() - lastSwitchTime > switchInterval) {
     // 這裡不進行未回應的扣分
     pickNewName();
