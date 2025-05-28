@@ -19,23 +19,21 @@ let boxPulse = 0;
 
 function setup() {
   createCanvas(640, 480);
-   // 啟用攝影機
-  video = createCapture(VIDEO);
+
+  // 初始化攝影機，只呼叫一次
+  video = createCapture(VIDEO, () => {
+    console.log("攝影機成功啟動！");
+  });
   video.size(width, height);
   video.hide();
 
-  // 印出 video 物件到 Console，確認攝影機有啟動
-  console.log(video);
-  // 初始化 ml5 的 FaceAPI 和 Handpose 模型
-  video = createCapture(VIDEO);
-  video.size(width, height);
-  video.hide();
-
+  // 初始化 FaceAPI
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
     console.log("FaceAPI ready!");
     faceapi.detect(gotFace);
   });
 
+  // 初始化 Handpose
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
   });
@@ -49,30 +47,36 @@ function setup() {
 function draw() {
   image(video, 0, 0, width, height);
 
+  // 動畫效果：名字方框跳動
   boxPulse = sin(frameCount * 0.05) * 10;
   let currentBoxSize = boxSize + boxPulse;
 
+  // 顯示名字框
   fill(255);
   stroke(0);
   rectMode(CENTER);
   rect(width / 2, height / 2, currentBoxSize, currentBoxSize / 2);
 
+  // 顯示名字文字
   fill(0);
   textAlign(CENTER, CENTER);
   textSize(28);
   text(currentName, width / 2, height / 2);
 
+  // 分數顯示
   fill(0, 200, 0);
   textSize(18);
   textAlign(LEFT);
   text("Score: " + score, 10, 25);
 
+  // 回饋提示
   fill(255, 0, 0);
   textAlign(CENTER);
   textSize(22);
   text(feedback, width / 2, height - 40);
 
-  if (frameCount - lastSwitchFrame > 180) { // 每3秒檢查一次動作並換名字
+  // 每3秒切換題目並評分
+  if (frameCount - lastSwitchFrame > 180) {
     checkAction();
     pickNewName();
   }
@@ -115,7 +119,7 @@ function isPouting() {
     let topLip = mouth[13];
     let bottomLip = mouth[19];
     let d = dist(topLip._x, topLip._y, bottomLip._x, bottomLip._y);
-    return d < 10; // 嘟嘴時嘴唇距離會變小，這是簡單判斷
+    return d < 10; // 嘟嘴嘴唇靠近
   }
   return false;
 }
@@ -129,7 +133,6 @@ function isThumbsUp() {
     let ringTip = landmarks[16];
     let pinkyTip = landmarks[20];
 
-    // 判斷拇指向上，且其他手指收起
     let thumbUp = thumbTip[1] < indexTip[1] &&
                   middleTip[1] > indexTip[1] &&
                   ringTip[1] > indexTip[1] &&
