@@ -66,10 +66,9 @@ function showStartScreen() {
   background(220);
   fill(0);
   textSize(32);
-  text("準備開始...", width / 2, height / 2 - 50);
-  textSize(20);
-  text("（等待模型載入）", width / 2, height / 2); // 簡化提示
-  
+  text("準備開始...", width / 2, height / 2 - 50); // 保留主要提示
+  // 移除與攝影機權限相關的提示文字
+
   let startButton = select('#startButton');
   if (startButton) {
     startButton.style('display', 'block');
@@ -123,8 +122,9 @@ function startGame() {
     feedback = "請等待 AI 模型載入完成！";
     return;
   }
+  // 移除攝影機需要權限的提示，直接檢查是否偵測到物件
   if (detections.length === 0 && hands.length === 0) {
-      feedback = "請將臉部或手部對準攝影機後再點擊開始！";
+      feedback = "請將臉部或手部對準攝影機後再點擊開始！"; // 提示對準畫面
       return; // 如果沒有偵測到任何東西，不啟動遊戲
   }
 
@@ -298,4 +298,207 @@ function checkAction() {
   if (actionDetected) {
       actionCheckedForCurrentName = true;
       if (detections.length > 0) {
-        let faceNose = detections
+        let faceNose = detections[0].parts.nose[0]; 
+        correctionMarkPosition = createVector(faceNose._x, faceNose._y - 50); 
+      } else if (hands.length > 0) { 
+        let wrist = hands[0].landmarks[0]; 
+        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
+      }
+      correctionMarkType = correctAction ? 'check' : 'cross';
+      showCorrectionMark = true;
+      correctionMarkStartTime = millis();
+  } else {
+      // 如果沒有偵測到有效動作 (但有人臉或手部數據)，可以給一個提示
+      if (detections.length > 0 || hands.length > 0) {
+          if (!actionCheckedForCurrentName) {
+              feedback = "請做出正確的動作！";
+          }
+      } else {
+          // 如果連臉和手都沒偵測到
+          feedback = "偵測中...請對準攝影機！"; // 這是最後的提示，無法避免
+      }
+  }
+}
+
+// 判斷是否為張大嘴巴動作
+function isOpenMouth() {
+  if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
+    let mouth = detections[0].parts.mouth;
+    // 內上唇中點 (例如 11)
+    let innerTopLip = mouth[11];
+    // 內下唇中點 (例如 16)
+    let innerBottomLip = mouth[16];
+
+    // 外上唇中點 (例如 13)
+    let outerTopLip = mouth[13];
+    // 外下唇中點 (例如 19)
+    let outerBottomLip = mouth[19];
+
+
+    if (innerTopLip && innerBottomLip && outerTopLip && outerBottomLip) {
+      let innerVerticalDist = dist(innerTopLip._x, innerTopLip._y, innerBottomLip._x, innerBottomLip._y);
+      let outerVerticalDist = dist(outerTopLip._x, outerTopLip._y, outerBottomLip._x, outerBottomLip._y);
+
+      const OPEN_MOUTH_THRESHOLD_INNER = 15; // 內唇垂直距離至少要大於15像素
+      const OPEN_MOUTH_THRESHOLD_OUTER = 25; // 外唇垂直距離至少要大於25像素
+
+      return innerVerticalDist > OPEN_MOUTH_THRESHOLD_INNER &&
+             outerVerticalDist > OPEN_MOUTH_THRESHOLD_OUTER;
+    }
+  }
+  return false;
+}
+
+// 判斷是否為比讚動作
+function isThumbsUp() {
+  if (hands.length > 0) {
+    let landmarks = hands[0].landmarks;
+    if (landmarks.length >= 21) {
+      let thumbTip = landmarks[4];    // 拇指尖
+      let thumbMCP = landmarks[2];    // 拇指根部關節 (metacarpophalangeal joint)
+
+      let indexTip = landmarks[8];    // 食指尖
+      let middleTip = landmarks[12];  // 中指尖
+      let ringTip = landmarks[16];    // 無名指尖
+      let pinkyTip = landmarks[20];   // 小指尖
+
+      let thumbIsUp = thumbTip[1] < landmarks[9][1]; 
+      let thumbAboveBase = thumbTip[1] < thumbMCP[1];
+
+      let indexCurled = indexTip[1] > landmarks[5][1] + 10;
+      let middleCurled = middleTip[1] > landmarks[9][1] + 10;
+      let ringCurled = ringTip[1] > landmarks[13][1] + 10;   
+      let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 10; 
+
+      let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
+      
+      let thumbAsideIndex = thumbTip[0] < indexTip[0] && (indexTip[0] - thumbTip[0]) > 20;
+
+      return thumbIsUp && thumbAboveBase && allFingersCurled && thumbAsideIndex;
+    }
+  }
+  return false;
+}
+
+// 繪製嘴巴關鍵點和連線 (淺黃色)
+function drawMouthPoints() {
+  if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
+    let mouth = detections[0].parts.mouth;
+    
+    noFill();
+    stroke(255, 255, 0, 200); // 淺黃色，帶透明度
+    strokeWeight(2);
+
+    // 繪製上唇外側輪廓
+    beginShape();
+    vertex(mouth[409]._x, mouth[409]._y);
+    vertex(mouth[270]._x, mouth[270]._y);
+    vertex(mouth[269]._x, mouth[269]._y);
+    vertex(mouth[267]._x, mouth[267]._y);
+    vertex(mouth[0]._x, mouth[0]._y); // 唇峰
+    vertex(mouth[37]._x, mouth[37]._y);
+    vertex(mouth[39]._x, mouth[39]._y);
+    vertex(mouth[40]._x, mouth[40]._y);
+    vertex(mouth[185]._x, mouth[185]._y);
+    vertex(mouth[61]._x, mouth[61]._y); // 左嘴角
+    endShape();
+
+    // 繪製下唇外側輪廓
+    beginShape();
+    vertex(mouth[61]._x, mouth[61]._y); // 從左嘴角開始
+    vertex(mouth[146]._x, mouth[146]._y);
+    vertex(mouth[91]._x, mouth[91]._y);
+    vertex(mouth[181]._x, mouth[181]._y);
+    vertex(mouth[84]._x, mouth[84]._y);
+    vertex(mouth[17]._x, mouth[17]._y); // 唇底
+    vertex(mouth[314]._x, mouth[314]._y);
+    vertex(mouth[405]._x, mouth[405]._y);
+    vertex(mouth[321]._x, mouth[321]._y);
+    vertex(mouth[375]._x, mouth[375]._y);
+    vertex(mouth[291]._x, mouth[291]._y); // 右嘴角
+    endShape();
+    
+    // 繪製內唇輪廓 
+    // 內上唇
+    beginShape();
+    vertex(mouth[76]._x, mouth[76]._y);
+    vertex(mouth[77]._x, mouth[77]._y);
+    vertex(mouth[90]._x, mouth[90]._y);
+    vertex(mouth[180]._x, mouth[180]._y);
+    vertex(mouth[85]._x, mouth[85]._y);
+    vertex(mouth[16]._x, mouth[16]._y); // 內唇中點 (上)
+    vertex(mouth[315]._x, mouth[315]._y);
+    vertex(mouth[404]._x, mouth[404]._y);
+    vertex(mouth[320]._x, mouth[320]._y);
+    vertex(mouth[307]._x, mouth[307]._y);
+    vertex(mouth[306]._x, mouth[306]._y);
+    endShape(CLOSE); // 閉合形狀
+
+    // 內下唇
+    beginShape();
+    vertex(mouth[408]._x, mouth[408]._y);
+    vertex(mouth[304]._x, mouth[304]._y);
+    vertex(mouth[303]._x, mouth[303]._y);
+    vertex(mouth[302]._x, mouth[302]._y);
+    vertex(mouth[11]._x, mouth[11]._y); // 內唇中點 (下)
+    vertex(mouth[72]._x, mouth[72]._y);
+    vertex(mouth[73]._x, mouth[73]._y);
+    vertex(mouth[74]._x, mouth[74]._y);
+    vertex(mouth[184]._x, mouth[184]._y);
+    endShape(CLOSE); // 閉合形狀
+
+    // 繪製點 (可選)
+    fill(255, 255, 0);
+    noStroke();
+    for(let index of mouthPoints) {
+        if(mouth[index]) {
+            ellipse(mouth[index]._x, mouth[index]._y, 4, 4);
+        }
+    }
+  }
+}
+
+// 繪製手部關節點和連線 (淺綠色)
+function drawHandLandmarks() {
+  for (let i = 0; i < hands.length; i++) {
+    let hand = hands[i];
+    for (let j = 0; j < hand.landmarks.length; j++) {
+      let landmark = hand.landmarks[j];
+      fill(100, 255, 100); // 淺綠色
+      noStroke();
+      ellipse(landmark[0], landmark[1], 8, 8); // 稍微大一點的點
+    }
+    stroke(100, 255, 100); // 淺綠色
+    strokeWeight(2);
+
+    // 連接手部骨架 (Handpose 的 landmark 索引有特定規則)
+    // 拇指 (0-4)
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[1][0], hand.landmarks[1][1]);
+    line(hand.landmarks[1][0], hand.landmarks[1][1], hand.landmarks[2][0], hand.landmarks[2][1]);
+    line(hand.landmarks[2][0], hand.landmarks[2][1], hand.landmarks[3][0], hand.landmarks[3][1]);
+    line(hand.landmarks[3][0], hand.landmarks[3][1], hand.landmarks[4][0], hand.landmarks[4][1]);
+    // 食指 (5-8)
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]); // 腕部到食指根部
+    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[6][0], hand.landmarks[6][1]);
+    line(hand.landmarks[6][0], hand.landmarks[6][1], hand.landmarks[7][0], hand.landmarks[7][1]);
+    line(hand.landmarks[7][0], hand.landmarks[7][1], hand.landmarks[8][0], hand.landmarks[8][1]);
+    // 中指 (9-12)
+    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[10][0], hand.landmarks[10][1]);
+    line(hand.landmarks[10][0], hand.landmarks[10][1], hand.landmarks[11][0], hand.landmarks[11][1]);
+    line(hand.landmarks[11][0], hand.landmarks[11][1], hand.landmarks[12][0], hand.landmarks[12][1]);
+    // 無名指 (13-16)
+    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[14][0], hand.landmarks[14][1]);
+    line(hand.landmarks[14][0], hand.landmarks[14][1], hand.landmarks[15][0], hand.landmarks[15][1]);
+    line(hand.landmarks[15][0], hand.landmarks[15][1], hand.landmarks[16][0], hand.landmarks[16][1]);
+    // 小指 (17-20)
+    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[18][0], hand.landmarks[18][1]);
+    line(hand.landmarks[18][0], hand.landmarks[18][1], hand.landmarks[19][0], hand.landmarks[19][1]);
+    line(hand.landmarks[19][0], hand.landmarks[19][1], hand.landmarks[20][0], hand.landmarks[20][1]);
+    // 手掌連接 (基於腕部和指根的連接)
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]);
+    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[9][0], hand.landmarks[9][1]);
+    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[13][0], hand.landmarks[13][1]);
+    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[17][0], hand.landmarks[17][1]);
+    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[0][0], hand.landmarks[0][1]);
+  }
+}
