@@ -9,9 +9,10 @@ let timeLeft = 60;       // 剩餘時間 (秒)
 let gameInterval;        // 倒數計時器的 interval ID
 
 let nameList = [
-  "顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴",
-  "馬嘉祺", "丁程鑫", "宋亞軒", "劉耀文", "張真源", "嚴浩翔", "賀峻霖"
+  "顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴", // 老師們
+  "馬嘉祺", "丁程鑫", "宋亞軒", "劉耀文", "張真源", "嚴浩翔", "賀峻霖"  // 非老師們
 ];
+// 淡江教科的老師們 (請確認此列表包含所有老師的名字)
 let teacherList = ["顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴"];
 let currentName = "";      // 目前顯示的人名
 let lastSwitchTime = 0;    // 上次切換人名的時間 (millis())
@@ -113,6 +114,7 @@ function startGame() {
   startTime = millis();
   pickNewName(); // 第一次選取名字並啟動動作偵測窗口
   
+  // 遊戲進行 60 秒
   if (gameInterval) clearInterval(gameInterval);
   gameInterval = setInterval(() => {
     timeLeft--;
@@ -165,19 +167,32 @@ function draw() {
   textSize(22);
   text(feedback, width / 2, height - 10);
 
-
-  // 偵測頻率控制變數
+  // 限制手勢偵測頻率
   if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
     handpose.predict(video).then(results => {
       hands = results;
-      // 在這裡添加一行：
-      console.log("偵測到的手部數量:", hands.length); // 加入這行
+
+      // ======== 為了更詳細的偵錯，可以在這裡添加以下內容 ========
+      // if (hands.length > 0) {
+      //   console.log("偵測到手部！數量:", hands.length);
+      //   console.log("手勢判斷 - 握拳:", isFistClosed());
+      //   console.log("手勢判斷 - 攤開:", isOpenHand());
+      //   // 如果需要更詳細的關節點數據來調試，可以打開這行
+      //   // console.log("手部關節點:", hands[0].landmarks);
+      // } else {
+      //   console.log("未偵測到手部。");
+      // }
+      // =======================================================
+
+
+      // 在手部數據更新後立即嘗試檢查動作
       if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0) {
         checkAction();
       }
     });
     lastHandDetectTime = millis();
   } else if (hands.length === 0) {
+    // 如果沒有偵測到手，提示用戶對準攝影機
     feedback = "偵測中...請對準攝影機！";
   }
 
@@ -207,7 +222,7 @@ function draw() {
     }
   }
 
- // 時間到自動換名字，不再因為未回應而扣分
+  // 時間到自動換名字，不再因為未回應而扣分
   if (millis() - lastSwitchTime > switchInterval) {
     // 這裡不進行未回應的扣分
     pickNewName();
@@ -253,7 +268,7 @@ function checkAction() {
   // 只有在動作窗口開啟且該名字的動作尚未被檢查過時才執行
   if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0) return;
 
-  let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或一根手指)
+  let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或攤開)
   let correctAction = false;
 
   const isCurrentTeacher = teacherList.includes(currentName);
@@ -263,25 +278,25 @@ function checkAction() {
     if (isFistClosed()) {
       actionMade = true;
       correctAction = true;
-      score += (currentName === "陳慶帆" ? 2 : 1);
+      score += (currentName === "陳慶帆" ? 2 : 1); // 陳慶帆老師答對加2分，其他老師加1分
       feedback = (currentName === "陳慶帆") ? "👊 陳慶帆老師來了！握拳加倍加分！" : "👊 老師來了！握拳加分！";
-    } else if (isOneFingerUp()) { // 錯誤動作也算作一次嘗試
+    } else if (isOpenHand()) { // 錯誤動作（攤開）也算作一次嘗試
       actionMade = true;
       correctAction = false;
-      score -= (currentName === "陳慶帆" ? 3 : 1);
-      feedback = "😐 對老師要握拳才能加分喔！";
+      score -= (currentName === "陳慶帆" ? 3 : 1); // 陳慶帆老師答錯扣3分，其他老師扣1分
+      feedback = (currentName === "陳慶帆") ? "😐 對陳慶帆老師要握拳才能加分喔！扣3分！" : "😐 對老師要握拳才能加分喔！扣1分！";
     }
   } else {
-    // 如果不是教科老師，期望比一根手指
-    if (isOneFingerUp()) {
+    // 如果不是教科老師，期望攤開手
+    if (isOpenHand()) {
       actionMade = true;
       correctAction = true;
-      feedback = "👆 這不是老師，給他一根手指！";
+      feedback = "🖐️ 這不是老師，給他攤開手！加1分！";
       score += 1;
-    } else if (isFistClosed()) { // 錯誤動作也算作一次嘗試
+    } else if (isFistClosed()) { // 錯誤動作（握拳）也算作一次嘗試
       actionMade = true;
       correctAction = false;
-      feedback = "🖐️ 這時候要比一根手指啦～";
+      feedback = "👊 這時候要攤開手啦～扣1分！";
       score -= 1;
     }
   }
@@ -309,61 +324,57 @@ function isFistClosed() {
       let ringTip = landmarks[16];
       let pinkyTip = landmarks[20];
 
-      let thumbClose = dist(thumbTip[0], thumbTip[1], landmarks[5][0], landmarks[5][1]) < 40; // 拇指尖靠近食指根部
-      let indexClose = indexTip[1] > landmarks[5][1] + 20; // 食指尖在根部下方
-      let middleClose = middleTip[1] > landmarks[9][1] + 20; // 中指尖在根部下方
-      let ringClose = ringTip[1] > landmarks[13][1] + 20;    // 無名指尖在根部下方
-      let pinkyClose = pinkyTip[1] > landmarks[17][1] + 20; // 小指尖在根部下方
+      // 檢查食指、中指、無名指、小指尖是否低於各自的掌指關節 (MCP)
+      // 增加一點裕度，讓判斷更寬鬆
+      let indexCurled = indexTip[1] > landmarks[5][1] + 10;
+      let middleCurled = middleTip[1] > landmarks[9][1] + 10;
+      let ringCurled = ringTip[1] > landmarks[13][1] + 10;
+      let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 10;
 
-      let allFingersCurled = indexClose && middleClose && ringClose && pinkyClose;
+      let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
 
-      let thumbToMiddleProximity = dist(thumbTip[0], thumbTip[1], landmarks[10][0], landmarks[10][1]) < 40;
+      // 檢查拇指尖是否靠近手掌或其他手指
+      // 拇指尖 (4) 和手掌中心區域 (例如中指第二關節 9) 的距離
+      let thumbCloseToPalm = dist(thumbTip[0], thumbTip[1], landmarks[9][0], landmarks[9][1]) < 80; // 稍微調整閾值
 
-      return allFingersCurled && thumbClose && thumbToMiddleProximity;
+      return allFingersCurled && thumbCloseToPalm;
     }
   }
   return false;
 }
 
 
-// 判斷是否為比一根手指的動作 (食指朝上)
-function isOneFingerUp() {
+// 判斷是否為攤開手掌的動作 (原先的 isOneFingerUp 改為 isOpenHand)
+function isOpenHand() {
   if (hands.length > 0) {
     let landmarks = hands[0].landmarks;
     if (landmarks.length >= 21) {
-      let indexTip = landmarks[8];     // 食指尖
-      let indexPIP = landmarks[6];     // 食指中間關節
-      let indexMCP = landmarks[5];     // 食指根部關節
+      // 檢查所有手指的尖端是否都明顯高於其根部關節 (即手指伸直)
+      // 使用 wrist (0) 或掌指關節 (5, 9, 13, 17) 作為參考
+      let wrist = landmarks[0];
+      let indexTip = landmarks[8];
+      let middleTip = landmarks[12];
+      let ringTip = landmarks[16];
+      let pinkyTip = landmarks[20];
+      let thumbTip = landmarks[4];
 
-      let thumbTip = landmarks[4];     // 拇指尖
-      let middleTip = landmarks[12];   // 中指尖
-      let ringTip = landmarks[16];     // 無名指尖
-      let pinkyTip = landmarks[20];    // 小指尖
-      let wrist = landmarks[0];        // 腕部
+      // 判斷手指是否向上伸直（Y座標更小）
+      let indexStraight = indexTip[1] < landmarks[5][1] - 30; // 食指尖明顯高於根部
+      let middleStraight = middleTip[1] < landmarks[9][1] - 30;
+      let ringStraight = ringTip[1] < landmarks[13][1] - 30;
+      let pinkyStraight = pinkyTip[1] < landmarks[17][1] - 30;
+      let thumbStraight = thumbTip[1] < landmarks[1][1] - 30; // 拇指尖高於第一個關節
 
-      // 1. 食指是直的且朝上 (相對腕部)
-      let indexIsUpAndStraight = (indexTip[1] < indexPIP[1]) &&
-                                 (indexPIP[1] < indexMCP[1]) &&
-                                 (indexMCP[1] < wrist[1]);
-      
-      let indexVerticalDist = dist(indexTip[0], indexTip[1], wrist[0], wrist[1]);
-      const MIN_INDEX_VERTICAL_DIST = 50;
-      
-      // 2. 其他手指都彎曲 (尖端低於各自的MCP關節 + 一些裕度)
-      let thumbCurled = thumbTip[1] > landmarks[3][1] + 15; // 拇指尖低於拇指倒數第二個關節
-      let middleCurled = middleTip[1] > landmarks[9][1] + 15;
-      let ringCurled = ringTip[1] > landmarks[13][1] + 15;    
-      let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 15; 
+      // 檢查手指是否張開（X座標間距）
+      // 判斷食指和中指、中指和無名指、無名指和小指之間是否有足夠的橫向距離
+      let fingersSpread = dist(indexTip[0], indexTip[0], middleTip[0], middleTip[1]) > 50 && // 確保不是比讚
+                          dist(landmarks[8][0], landmarks[8][1], landmarks[12][0], landmarks[12][1]) > 30 &&
+                          dist(landmarks[12][0], landmarks[12][1], landmarks[16][0], landmarks[16][1]) > 30 &&
+                          dist(landmarks[16][0], landmarks[16][1], landmarks[20][0], landmarks[20][1]) > 30;
 
-      // 檢查其他手指的X座標是否靠近手掌中心，表示彎曲
-      let middleXCheck = Math.abs(middleTip[0] - landmarks[9][0]) < 20;
-      let ringXCheck = Math.abs(ringTip[0] - landmarks[13][0]) < 20;
-      let pinkyXCheck = Math.abs(pinkyTip[0] - landmarks[17][0]) < 20;
-      
-      return indexIsUpAndStraight &&
-             indexVerticalDist > MIN_INDEX_VERTICAL_DIST &&
-             thumbCurled && middleCurled && ringCurled && pinkyCurled &&
-             middleXCheck && ringXCheck && pinkyXCheck;
+
+      // 綜合判斷：所有手指都伸直，且手指之間有一定間距
+      return indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraight && fingersSpread;
     }
   }
   return false;
