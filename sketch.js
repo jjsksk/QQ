@@ -6,6 +6,7 @@ let hands = [];     // 儲存手部偵測結果
 
 // 遊戲狀態變數
 let gameStarted = false; // 遊戲是否開始
+let gameModelsLoaded = false; // 所有 AI 模型是否載入完成
 let startTime;           // 遊戲開始時間
 let timeLeft = 60;       // 剩餘時間 (秒)
 let gameInterval;        // 倒數計時器的 interval ID
@@ -24,6 +25,9 @@ let score = 0;             // 遊戲分數
 let boxSize = 200;
 let boxPulse = 0;          // 人名方塊的脈動效果
 
+// 動作判斷狀態變數 (防止重複加減分)
+let actionCheckedForCurrentName = false; // 當前人名是否已檢查過動作並給分/扣分
+
 // 視覺回饋相關變數
 let showCorrectionMark = false; // 是否顯示打勾或打叉
 let correctionMarkType = '';    // 'check' 或 'cross'
@@ -32,24 +36,24 @@ let correctionMarkAlpha = 255;  // 打勾或打叉的透明度
 let correctionMarkDuration = 1000; // 打勾或打叉顯示時間 (毫秒)
 let correctionMarkStartTime;    // 打勾或打叉開始顯示的時間
 
+// 你提供的嘴巴點位索引
+const mouthPoints = [
+  409, 270, 269, 267, 0, 37, 39, 40, 185, 61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, // 上下唇外側
+  76, 77, 90, 180, 85, 16, 315, 404, 320, 307, 306, 408, 304, 303, 302, 11, 72, 73, 74, 184  // 上下唇內側 (內圈可能更適合判斷張嘴)
+];
+
 function setup() {
   createCanvas(640, 480);
-  // 啟動攝影機，並在攝影機準備好後呼叫 videoReady 函數
   video = createCapture(VIDEO, videoReady);
   video.size(width, height);
   video.hide();
 
-  // 設置文字對齊方式，全局應用
   textAlign(CENTER, CENTER);
   textSize(28);
 
-  // 顯示開始遊戲按鈕或提示
   showStartScreen();
 
-  // ***** 這兩行是要添加在這裡！ *****
-  // 選擇 HTML 中的按鈕，並設置點擊事件
   let startButton = select('#startButton');
-  // 檢查按鈕是否存在，避免找不到元素時報錯
   if (startButton) {
     startButton.mousePressed(startGame);
   } else {
@@ -58,153 +62,173 @@ function setup() {
   }
 }
 
-// 顯示遊戲開始畫面 (此函數本身定義在 setup 外部)
 function showStartScreen() {
   background(220);
   fill(0);
   textSize(32);
   text("準備開始...", width / 2, height / 2 - 50);
   textSize(20);
-  text("（請允許攝影機權限）", width / 2, height / 2);
+  text("（請允許攝影機權限並等待模型載入）", width / 2, height / 2);
   
-  // 顯示按鈕 (確保按鈕可見)
   let startButton = select('#startButton');
   if (startButton) {
     startButton.style('display', 'block');
+    startButton.html('開始遊戲'); // 確保文字是開始遊戲
+    startButton.attribute('disabled', ''); // 預設禁用按鈕
+  }
+
+  if (gameModelsLoaded) {
+    if (startButton) {
+      startButton.html('模型載入完成，點擊開始');
+      startButton.removeAttribute('disabled'); // 啟用按鈕
+    }
+  } else {
+    if (startButton) {
+      startButton.html('載入 AI 模型中...'); // 載入時的提示
+    }
   }
 }
 
-// 這個函數會在攝影機成功啟動時被呼叫
 function videoReady() {
   console.log("攝影機成功啟動！");
 
-  // 初始化 FaceAPI 模型
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
     console.log("FaceAPI ready!");
-    faceapi.detect(gotFace); // 開始偵測臉部
+    faceapi.detect(gotFace);
+    checkModelsLoaded();
   });
 
-  // 初始化 Handpose 模型
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
+    checkModelsLoaded();
   });
   handpose.on("predict", (results) => {
-    hands = results; // 更新手部偵測結果
+    hands = results;
   });
 }
 
-// 遊戲開始函數 (此函數本身定義在 setup 外部)
-function startGame() {
-  console.log("遊戲開始！"); // 新增一個 console.log 方便確認
-  gameStarted = true;
-  startTime = millis(); // 記錄遊戲開始時間
-  pickNewName();       // 選擇第一個名字
+function checkModelsLoaded() {
+  // 檢查所有模型是否都已載入
+  if (faceapi && handpose && faceapi.ready && handpose.ready) {
+    gameModelsLoaded = true;
+    showStartScreen(); // 更新開始畫面以啟用按鈕
+  }
+}
 
-  // 啟動每秒更新一次的計時器
+
+function startGame() {
+  // 只有當模型載入完成，並且偵測到臉或手時才允許開始
+  if (!gameModelsLoaded) {
+    feedback = "請等待 AI 模型載入完成！";
+    return;
+  }
+  // 可以在這裡加入一個初始偵測的判斷，確保有人臉或手在畫面中
+  // 目前是直接從 `checkAction` 中判斷
+
+  console.log("遊戲開始！");
+  gameStarted = true;
+  startTime = millis();
+  pickNewName();
+  
+  // 確保清除之前可能存在的計時器
+  if (gameInterval) clearInterval(gameInterval);
   gameInterval = setInterval(() => {
     timeLeft--;
     if (timeLeft <= 0) {
-      clearInterval(gameInterval); // 停止計時器
-      endGame(); // 遊戲結束
+      clearInterval(gameInterval);
+      endGame();
     }
-  }, 1000); // 每 1000 毫秒 (1 秒) 執行一次
+  }, 1000);
 
-  // 遊戲開始後隱藏按鈕
   let startButton = select('#startButton');
   if (startButton) {
     startButton.style('display', 'none');
   }
 }
 
-
 function draw() {
-  background(250); // 設定背景為淺色
-
-  // 繪製攝影機影像
+  background(250);
   image(video, 0, 0, width, height);
 
-  // 如果遊戲還沒開始，只顯示開始畫面
   if (!gameStarted) {
-    showStartScreen();
-    return; // 不執行後續遊戲邏輯
+    showStartScreen(); // 持續顯示開始畫面並更新按鈕狀態
+    return;
   }
 
-  // 計算方塊的脈動效果
+  // 遊戲進行時的繪製和邏輯
   boxPulse = sin(frameCount * 0.05) * 10;
   let currentBoxSize = boxSize + boxPulse;
 
-  // 繪製人名方塊
-  let boxY = height * 0.8; // 將方塊中心設置在畫面高度的 80% 處
-  fill(255); // 白色背景
-  stroke(0); // 黑色邊框
-  rectMode(CENTER); // 矩形以中心點為準
+  let boxY = height * 0.8;
+  fill(255);
+  stroke(0);
+  rectMode(CENTER);
   rect(width / 2, boxY, currentBoxSize, currentBoxSize / 2);
 
-  // 繪製人名文字
-  fill(0); // 黑色文字
+  fill(0);
   textSize(28);
   text(currentName, width / 2, boxY);
 
-  // 繪製分數
-  fill(0, 200, 0); // 綠色
+  fill(0, 200, 0);
   textSize(24);
-  textAlign(LEFT, TOP); // 文字對齊方式：左上角
+  textAlign(LEFT, TOP);
   text("分數: " + score, 10, 10);
 
-  // 繪製計時器
-  fill(0, 0, 200); // 藍色
+  fill(0, 0, 200);
   textSize(24);
-  textAlign(RIGHT, TOP); // 文字對齊方式：右上角
-  text("時間: " + max(0, timeLeft) + "s", width - 10, 10); // 確保時間不為負數
+  textAlign(RIGHT, TOP);
+  text("時間: " + max(0, timeLeft) + "s", width - 10, 10);
 
-  // 繪製回饋訊息
-  fill(255, 0, 0); // 紅色
-  textAlign(CENTER, BOTTOM); // 文字對齊方式：置中，靠下
+  fill(255, 0, 0);
+  textAlign(CENTER, BOTTOM);
   textSize(22);
   text(feedback, width / 2, height - 10);
 
-  // 繪製偵測到的臉部關鍵點 (用於除錯，可移除註解)
-  // drawDetections();
-  // 繪製偵測到的手部關鍵點 (用於除錯，可移除註解)
-  // drawHands();
+  // **** 新增：即時偵測與判斷 ****
+  // 只有在當前人名還沒有進行過動作判斷時才執行 checkAction
+  if (!actionCheckedForCurrentName) {
+    checkAction();
+  }
+
+  // 繪製臉部嘴巴關鍵點和連線 (淺黃色)
+  drawMouthPoints();
+  // 繪製手部關節點和連線 (淺綠色)
+  drawHandLandmarks();
 
   // 顯示打勾或打叉的視覺回饋
   if (showCorrectionMark) {
     let elapsed = millis() - correctionMarkStartTime;
     if (elapsed < correctionMarkDuration) {
-      correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0); // 逐漸淡出
-      push(); // 儲存當前繪圖設定
+      correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
+      push();
       translate(correctionMarkPosition.x, correctionMarkPosition.y);
       noFill();
-      strokeWeight(5); // 粗一點的線條
-      stroke(0, 0, 255, correctionMarkAlpha); // 藍色，帶透明度
+      strokeWeight(5);
+      stroke(0, 0, 255, correctionMarkAlpha); // 藍色
 
       if (correctionMarkType === 'check') {
-        // 繪製打勾
         line(-20, 0, 0, 20);
         line(0, 20, 40, -20);
       } else if (correctionMarkType === 'cross') {
-        // 繪製打叉
         line(-20, -20, 20, 20);
         line(-20, 20, 20, -20);
       }
-      pop(); // 恢復之前的繪圖設定
+      pop();
     } else {
-      showCorrectionMark = false; // 隱藏標記
+      showCorrectionMark = false;
     }
   }
 
-  // 判斷是否需要切換名字和檢查動作
+  // 每隔 N 秒切換人名
   if (millis() - lastSwitchTime > switchInterval) {
-    checkAction();
     pickNewName();
+    actionCheckedForCurrentName = false; // 重置動作判斷狀態
   }
 }
 
-// 遊戲結束函數
 function endGame() {
-  gameStarted = false; // 停止遊戲
-  background(50); // 遊戲結束畫面背景
+  gameStarted = false;
+  background(50);
   fill(255);
   textSize(48);
   text("遊戲結束！", width / 2, height / 2 - 50);
@@ -213,90 +237,101 @@ function endGame() {
   textSize(20);
   text("點擊重新開始", width / 2, height / 2 + 80);
   
-  // 重置遊戲狀態
   score = 0;
   timeLeft = 60;
   feedback = "";
   detections = [];
   hands = [];
 
-  // 讓按鈕重新顯示以便重新開始
   let startButton = select('#startButton');
   if (startButton) {
     startButton.style('display', 'block');
-    startButton.html('重新開始遊戲'); // 修改按鈕文字
-    startButton.mousePressed(startGame); // 重新綁定事件，防止在遊戲結束後重複點擊觸發問題
+    startButton.html('重新開始遊戲');
+    startButton.removeAttribute('disabled'); // 啟用按鈕
   }
 }
 
-// 選擇新名字
 function pickNewName() {
   currentName = random(nameList);
-  lastSwitchTime = millis(); // 更新切換時間
-  feedback = ""; // 清空之前的提示訊息
+  lastSwitchTime = millis();
+  feedback = "";
+  actionCheckedForCurrentName = false; // 每次切換人名都重置動作判斷狀態
 }
 
-// 處理臉部偵測結果
 function gotFace(err, result) {
   if (result) {
     detections = result;
   }
-  // 每次偵測到臉部後，繼續下一輪偵測
   faceapi.detect(gotFace);
 }
 
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
+  // 如果已經針對當前人名進行過評分，則直接返回
+  if (actionCheckedForCurrentName) return;
+
   let correctAction = false; // 判斷玩家動作是否正確
+  let actionDetected = false; // 判斷是否有偵測到有效的臉或手動作
 
-  // 偵測到臉部或手部才進行判斷
-  if (detections.length === 0 && hands.length === 0) {
-      feedback = "偵測中...請對準攝影機！";
-      // 如果沒有偵測到任何東西，也不觸發分數變動和回饋標記
-      return;
-  }
-
-  // 判斷是否為教科老師
-  const isCurrentTeacher = teacherList.includes(currentName);
-
-  if (isCurrentTeacher) {
-    // 如果是教科老師，期望嘟嘴
-    if (isPouting()) {
-      feedback = "😘 成功親到老師！";
-      correctAction = true;
-      score += (currentName === "陳慶帆" ? 2 : 1); // 陳慶帆加2分，其他老師加1分
-    } else {
-      feedback = "😗 嘟嘴嘟嘴才是愛老師的方式！";
-      score -= (currentName === "陳慶帆" ? 3 : 1); // 陳慶帆減3分，其他老師減1分
-    }
-  } else {
-    // 如果不是教科老師，期望比讚
-    if (isThumbsUp()) {
-      feedback = "👍 這不是老師，給他個讚！";
-      correctAction = true;
-      score += 1; // 不是老師都加1分
-    } else {
-      feedback = "👎 這時候要比個讚啦～";
-      score -= 1; // 不是老師都減1分
-    }
-  }
-
-  // 處理視覺回饋 (打勾或打叉)
+  // 優先判斷臉部動作 (嘟嘴)
   if (detections.length > 0) {
-    // 假設打勾打叉顯示在頭部上方
-    // 取得臉部中央點的估計位置 (例如鼻子)
-    let faceNose = detections[0].parts.nose[0]; 
-    correctionMarkPosition = createVector(faceNose._x, faceNose._y - 50); // 稍微往上移
-    correctionMarkType = correctAction ? 'check' : 'cross';
-    showCorrectionMark = true;
-    correctionMarkStartTime = millis(); // 記錄開始顯示時間
-  } else if (hands.length > 0) { // 如果只偵測到手，沒有臉
-    // 取得手腕位置作為參考點
-    let wrist = hands[0].landmarks[0]; 
-    correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-    correctionMarkType = correctAction ? 'check' : 'cross';
-    showCorrectionMark = true;
-    correctionMarkStartTime = millis();
+      if (isPouting()) {
+          actionDetected = true;
+          const isCurrentTeacher = teacherList.includes(currentName);
+          if (isCurrentTeacher) {
+              feedback = "😘 成功親到老師！";
+              correctAction = true;
+              score += (currentName === "陳慶帆" ? 2 : 1);
+          } else {
+              feedback = "😗 對非老師不要嘟嘴喔！"; // 這是錯誤動作
+              correctAction = false;
+              score -= 1; // 非老師嘟嘴也扣分
+          }
+      }
+  }
+
+  // 如果臉部沒有偵測到特定動作，或者當前目標不是老師，則判斷手勢 (比讚)
+  // 避免在嘟嘴正確時又判斷手勢
+  if (!actionDetected && hands.length > 0) {
+      if (isThumbsUp()) {
+          actionDetected = true;
+          const isCurrentTeacher = teacherList.includes(currentName);
+          if (!isCurrentTeacher) { // 非老師才比讚
+              feedback = "👍 這不是老師，給他個讚！";
+              correctAction = true;
+              score += 1;
+          } else {
+              feedback = "👎 對老師比讚是錯的喔！"; // 這是錯誤動作
+              correctAction = false;
+              score -= (currentName === "陳慶帆" ? 3 : 1); // 老師錯了要扣分
+          }
+      }
+  }
+
+  // 如果偵測到動作並給分/扣分了，就設置狀態為已檢查
+  if (actionDetected) {
+      actionCheckedForCurrentName = true;
+      // 處理視覺回饋 (打勾或打叉)
+      if (detections.length > 0) {
+        let faceNose = detections[0].parts.nose[0]; 
+        correctionMarkPosition = createVector(faceNose._x, faceNose._y - 50); 
+      } else if (hands.length > 0) { 
+        let wrist = hands[0].landmarks[0]; 
+        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
+      }
+      correctionMarkType = correctAction ? 'check' : 'cross';
+      showCorrectionMark = true;
+      correctionMarkStartTime = millis();
+  } else {
+      // 如果沒有偵測到有效動作 (但有人臉或手部數據)，可以給一個提示
+      if (detections.length > 0 || hands.length > 0) {
+          if (!actionCheckedForCurrentName) { // 避免重複提示
+              feedback = "請做出正確的動作！";
+          }
+      } else {
+          // 如果連臉和手都沒偵測到
+          feedback = "偵測中...請對準攝影機！";
+      }
   }
 }
 
@@ -304,14 +339,28 @@ function checkAction() {
 function isPouting() {
   if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
     let mouth = detections[0].parts.mouth;
-    let topLip = mouth[13]; // 上唇中點偏上
-    let bottomLip = mouth[19]; // 下唇中點偏下
+    // 使用你提供的嘴唇內外側關鍵點
+    // 內圈的上下唇中點
+    let innerTopLip = mouth[11];
+    let innerBottomLip = mouth[16];
 
-    if (topLip && bottomLip) {
-      let d = dist(topLip._x, topLip._y, bottomLip._x, bottomLip._y);
-      // 嘟嘴的距離判斷可能需要微調，這裡給一個參考值
-      // 通常嘴唇越嘟，上下唇的距離會越小
-      return d < 12 && d > 3; // 避免距離為0 (嘴巴閉合) 和距離過大
+    // 外圈的上下唇中點
+    let outerTopLip = mouth[13];
+    let outerBottomLip = mouth[19];
+
+    if (innerTopLip && innerBottomLip && outerTopLip && outerBottomLip) {
+      // 判斷嘴唇內側垂直距離是否足夠小 (閉合或嘟起)
+      let innerLipDist = dist(innerTopLip._x, innerTopLip._y, innerBottomLip._x, innerBottomLip._y);
+      // 判斷嘴唇外側垂直距離是否也比較小 (表示嘟嘴)
+      let outerLipDist = dist(outerTopLip._x, outerTopLip._y, outerBottomLip._x, outerBottomLip._y);
+
+      // 嘟嘴判斷邏輯：
+      // 1. 內唇距離很小 (嘴巴閉合或微張)
+      // 2. 外唇距離也相對小 (不是大張嘴)
+      // 3. 嘴巴的水平寬度相對變小 (可以加這個判斷，但更複雜)
+
+      // 這裡僅用垂直距離判斷，可以根據實際測試調整閾值
+      return innerLipDist < 8 && outerLipDist < 15; // 內唇非常接近，外唇也比較接近
     }
   }
   return false;
@@ -334,18 +383,14 @@ function isThumbsUp() {
       let thumbIsUp = thumbTip[1] < thumbMCP[1];
 
       // 2. 其他四指是彎曲狀態 (指尖Y座標大於相應指關節Y座標)
-      // 簡單判斷：指尖Y座標大於指關節Y座標，表示手指是彎曲的
-      let indexCurled = indexTip[1] > landmarks[6][1]; // 食指
-      let middleCurled = middleTip[1] > landmarks[10][1]; // 中指
-      let ringCurled = ringTip[1] > landmarks[14][1];   // 無名指
-      let pinkyCurled = pinkyTip[1] > landmarks[18][1]; // 小指
+      let indexCurled = indexTip[1] > landmarks[6][1]; 
+      let middleCurled = middleTip[1] > landmarks[10][1]; 
+      let ringCurled = ringTip[1] > landmarks[14][1];   
+      let pinkyCurled = pinkyTip[1] > landmarks[18][1]; 
 
       let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
       
-      // 3. 確保拇指和食指之間有足夠的角度 (防止只是把手伸直)
-      // 這可以用拇指和食指的向量點積來判斷，或者簡單判斷它們在X軸上的相對位置
-      // 假設拇指在食指的左側 (對於右手)
-      // 這是一個簡易的判斷，如果偵測不準確，可能需要更複雜的幾何判斷
+      // 3. 確保拇指和食指分開 (拇指的 X 座標小於食指的 X 座標，表示拇指在食指左側 - 右手)
       let thumbAsideIndex = thumbTip[0] < indexTip[0]; 
 
       return thumbIsUp && allFingersCurled && thumbAsideIndex;
@@ -354,62 +399,98 @@ function isThumbsUp() {
   return false;
 }
 
-// 繪製臉部偵測結果 (用於除錯，預設註解)
-function drawDetections() {
-  for (let i = 0; i < detections.length; i++) {
-    const detection = detections[i];
+// 繪製嘴巴關鍵點和連線 (淺黃色)
+function drawMouthPoints() {
+  if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
+    let mouth = detections[0].parts.mouth;
+    
     noFill();
-    stroke(161, 95, 251);
+    stroke(255, 255, 0, 200); // 淺黃色，帶透明度
     strokeWeight(2);
-    let box = detection.box;
-    rect(box.x, box.y, box.width, box.height);
 
+    // 繪製你提供的點位連線
+    // 這是一個簡化的連線方式，可以根據實際嘴巴形狀調整連接順序
+    beginShape();
+    // 上唇外側 (部分點位)
+    vertex(mouth[409]._x, mouth[409]._y);
+    vertex(mouth[270]._x, mouth[270]._y);
+    vertex(mouth[269]._x, mouth[269]._y);
+    vertex(mouth[267]._x, mouth[267]._y);
+    vertex(mouth[0]._x, mouth[0]._y);
+    vertex(mouth[37]._x, mouth[37]._y);
+    vertex(mouth[39]._x, mouth[39]._y);
+    vertex(mouth[40]._x, mouth[40]._y);
+    vertex(mouth[185]._x, mouth[185]._y);
+    vertex(mouth[61]._x, mouth[61]._y); // 連接到嘴角
+    endShape();
+
+    beginShape();
+    // 下唇外側 (部分點位)
+    vertex(mouth[61]._x, mouth[61]._y); // 從嘴角開始
+    vertex(mouth[146]._x, mouth[146]._y);
+    vertex(mouth[91]._x, mouth[91]._y);
+    vertex(mouth[181]._x, mouth[181]._y);
+    vertex(mouth[84]._x, mouth[84]._y);
+    vertex(mouth[17]._x, mouth[17]._y);
+    vertex(mouth[314]._x, mouth[314]._y);
+    vertex(mouth[405]._x, mouth[405]._y);
+    vertex(mouth[321]._x, mouth[321]._y);
+    vertex(mouth[375]._x, mouth[375]._y);
+    vertex(mouth[291]._x, mouth[291]._y); // 連接到另一個嘴角
+    endShape();
+
+    // 繪製點 (可選)
+    fill(255, 255, 0);
     noStroke();
-    fill(161, 95, 251);
-    for (let j = 0; j < detection.landmarks.length; j++) {
-      let p = detection.landmarks[j];
-      ellipse(p._x, p._y, 5, 5);
-    }
-    fill(255, 0, 0); // 紅色
-    if (detection.parts && detection.parts.mouth) {
-        for (let p of detection.parts.mouth) {
-            ellipse(p._x, p._y, 5, 5);
+    for(let index of mouthPoints) {
+        if(mouth[index]) {
+            ellipse(mouth[index]._x, mouth[index]._y, 4, 4);
         }
     }
   }
 }
 
-// 繪製手部偵測結果 (用於除錯，預設註解)
-function drawHands() {
+// 繪製手部關節點和連線 (淺綠色)
+function drawHandLandmarks() {
   for (let i = 0; i < hands.length; i++) {
     let hand = hands[i];
     for (let j = 0; j < hand.landmarks.length; j++) {
       let landmark = hand.landmarks[j];
-      fill(0, 255, 0); // 綠色
+      fill(100, 255, 100); // 淺綠色
       noStroke();
-      ellipse(landmark[0], landmark[1], 10, 10);
+      ellipse(landmark[0], landmark[1], 8, 8); // 稍微大一點的點
     }
-    stroke(0, 255, 0);
+    stroke(100, 255, 100); // 淺綠色
     strokeWeight(2);
-    // 繪製骨架連接線 (省略部分，可以參考之前提供的完整骨架連接代碼)
+
+    // 連接手部骨架
     // 拇指
     line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[1][0], hand.landmarks[1][1]);
     line(hand.landmarks[1][0], hand.landmarks[1][1], hand.landmarks[2][0], hand.landmarks[2][1]);
     line(hand.landmarks[2][0], hand.landmarks[2][1], hand.landmarks[3][0], hand.landmarks[3][1]);
     line(hand.landmarks[3][0], hand.landmarks[3][1], hand.landmarks[4][0], hand.landmarks[4][1]);
-    // 食指到小指的連接 (簡化)
-    for (let f = 0; f < 4; f++) { // 4 根手指 (食指到小指)
-        let startIndex = 5 + f * 4;
-        for (let j = 0; j < 3; j++) {
-            line(hand.landmarks[startIndex + j][0], hand.landmarks[startIndex + j][1], 
-                 hand.landmarks[startIndex + j + 1][0], hand.landmarks[startIndex + j + 1][1]);
-        }
-    }
+    // 食指
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]); // 腕部到食指根部
+    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[6][0], hand.landmarks[6][1]);
+    line(hand.landmarks[6][0], hand.landmarks[6][1], hand.landmarks[7][0], hand.landmarks[7][1]);
+    line(hand.landmarks[7][0], hand.landmarks[7][1], hand.landmarks[8][0], hand.landmarks[8][1]);
+    // 中指
+    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[10][0], hand.landmarks[10][1]);
+    line(hand.landmarks[10][0], hand.landmarks[10][1], hand.landmarks[11][0], hand.landmarks[11][1]);
+    line(hand.landmarks[11][0], hand.landmarks[11][1], hand.landmarks[12][0], hand.landmarks[12][1]);
+    // 無名指
+    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[14][0], hand.landmarks[14][1]);
+    line(hand.landmarks[14][0], hand.landmarks[14][1], hand.landmarks[15][0], hand.landmarks[15][1]);
+    line(hand.landmarks[15][0], hand.landmarks[15][1], hand.landmarks[16][0], hand.landmarks[16][1]);
+    // 小指
+    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[18][0], hand.landmarks[18][1]);
+    line(hand.landmarks[18][0], hand.landmarks[18][1], hand.landmarks[19][0], hand.landmarks[19][1]);
+    line(hand.landmarks[19][0], hand.landmarks[19][1], hand.landmarks[20][0], hand.landmarks[20][1]);
     // 手掌連接
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]);
-    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[9][0], hand.landmarks[9][1]);
-    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[13][0], hand.landmarks[13][1]);
-    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[17][0], hand.landmarks[17][1]);
-    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[0][0], hand.landmarks[0][1]);
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]); // 腕部到食指根部
+    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[9][0], hand.landmarks[9][1]); // 食指根部到中指根部
+    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[13][0], hand.landmarks[13][1]);// 中指根部到無名指根部
+    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[17][0], hand.landmarks[17][1]);// 無名指根部到小指根部
+    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[0][0], hand.landmarks[0][1]);// 小指根部到腕部
   }
 }
