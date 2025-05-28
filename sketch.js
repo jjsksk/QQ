@@ -25,10 +25,10 @@ let score = 0;             // 遊戲分數
 let boxSize = 200;
 let boxPulse = 0;          // 人名方塊的脈動效果
 
-// 動作判斷狀態變數 (防止重複加減分)
+// 動作判斷狀態變數 (已移除，但保留變數以防意外)
 let actionCheckedForCurrentName = false; // 當前人名是否已檢查過動作並給分/扣分
 
-// 視覺回饋相關變數
+// 視覺回饋相關變數 (已移除，但保留變數以防意外)
 let showCorrectionMark = false; // 是否顯示打勾或打叉
 let correctionMarkType = '';    // 'check' 或 'cross'
 let correctionMarkPosition;     // 打勾或打叉的位置 (p5.Vector)
@@ -36,7 +36,7 @@ let correctionMarkAlpha = 255;  // 打勾或打叉的透明度
 let correctionMarkDuration = 1000; // 打勾或打叉顯示時間 (毫秒)
 let correctionMarkStartTime;    // 打勾或打叉開始顯示的時間
 
-// 你提供的嘴巴點位索引 (用於繪圖和判斷張大嘴巴)
+// 你提供的嘴巴點位索引 (現在僅用於繪圖)
 const mouthPoints = [
   409, 270, 269, 267, 0, 37, 39, 40, 185, 61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, // 上下唇外側
   76, 77, 90, 180, 85, 16, 315, 404, 320, 307, 306, 408, 304, 303, 302, 11, 72, 73, 74, 184  // 上下唇內側
@@ -100,16 +100,13 @@ function videoReady() {
 
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
     console.log("FaceAPI ready!");
-    // **** 修改：不再直接呼叫 detect，改為在 draw 中受控呼叫 ****
     checkModelsLoaded();
   });
 
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
-    // **** 修改：不再直接設定 on("predict")，改為在 draw 中受控呼叫 ****
     checkModelsLoaded();
   });
-  // handpose.on("predict", (results) => { hands = results; }); // 這行會被移除或修改
 }
 
 function checkModelsLoaded() {
@@ -127,12 +124,8 @@ function startGame() {
     feedback = "請等待 AI 模型載入完成！";
     return;
   }
-  // 檢查是否有偵測到物件，而不是直接提示權限
-  if (detections.length === 0 && hands.length === 0) {
-      feedback = "請將臉部或手部對準攝影機後再點擊開始！";
-      return; // 如果沒有偵測到任何東西，不啟動遊戲
-  }
-
+  
+  // 遊戲啟動時不再檢查是否有偵測到物件，因為移除了動作偵測
   console.log("遊戲開始！");
   gameStarted = true;
   startTime = millis();
@@ -190,13 +183,13 @@ function draw() {
   textSize(22);
   text(feedback, width / 2, height - 10);
 
-  // **** 優化點 1：限制人臉偵測頻率 ****
+  // 限制人臉偵測頻率
   if (faceapi && gameModelsLoaded && (millis() - lastFaceDetectTime > faceDetectInterval)) {
     faceapi.detect(gotFace);
     lastFaceDetectTime = millis();
   }
 
-  // **** 優化點 2：限制手勢偵測頻率 ****
+  // 限制手勢偵測頻率
   if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
     handpose.predict(video).then(results => {
       hands = results;
@@ -204,40 +197,55 @@ function draw() {
     lastHandDetectTime = millis();
   }
 
-  // 偵測與判斷
-  if (!actionCheckedForCurrentName) {
-    checkAction();
-  }
+  // ** 移除了 checkAction() 的呼叫，因為不再偵測動作 **
+  // if (!actionCheckedForCurrentName) {
+  //   checkAction();
+  // }
 
+  // 繪製嘴巴和手部點位仍然保留，以便視覺化
   drawMouthPoints();
   drawHandLandmarks();
 
-  if (showCorrectionMark) {
-    let elapsed = millis() - correctionMarkStartTime;
-    if (elapsed < correctionMarkDuration) {
-      correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
-      push();
-      translate(correctionMarkPosition.x, correctionMarkPosition.y);
-      noFill();
-      strokeWeight(5);
-      stroke(0, 0, 255, correctionMarkAlpha); // 藍色
+  // ** 移除了 correction mark 的顯示邏輯 **
+  // if (showCorrectionMark) {
+  //   let elapsed = millis() - correctionMarkStartTime;
+  //   if (elapsed < correctionMarkDuration) {
+  //     correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
+  //     push();
+  //     translate(correctionMarkPosition.x, correctionMarkPosition.y);
+  //     noFill();
+  //     strokeWeight(5);
+  //     stroke(0, 0, 255, correctionMarkAlpha); // 藍色
 
-      if (correctionMarkType === 'check') {
-        line(-20, 0, 0, 20);
-        line(0, 20, 40, -20);
-      } else if (correctionMarkType === 'cross') {
-        line(-20, -20, 20, 20);
-        line(-20, 20, 20, -20);
-      }
-      pop();
-    } else {
-      showCorrectionMark = false;
-    }
-  }
+  //     if (correctionMarkType === 'check') {
+  //       line(-20, 0, 0, 20);
+  //       line(0, 20, 40, -20);
+  //     } else if (correctionMarkType === 'cross') {
+  //       line(-20, -20, 20, 20);
+  //       line(-20, 20, 20, -20);
+  //     }
+  //     pop();
+  //   } else {
+  //     showCorrectionMark = false;
+  //   }
+  // }
 
   if (millis() - lastSwitchTime > switchInterval) {
     pickNewName();
-    actionCheckedForCurrentName = false;
+    // ** 動作檢查標誌現在沒有實際作用，但可保留以防未來需要 **
+    actionCheckedForCurrentName = false; 
+    
+    // ** 自動加減分邏輯：當人名切換時，直接根據是否為老師進行加減分 **
+    const isCurrentTeacher = teacherList.includes(currentName);
+    if (isCurrentTeacher) {
+        // 如果是老師，直接加分
+        score += (currentName === "陳慶帆" ? 2 : 1);
+        feedback = "老師來了！自動加分！";
+    } else {
+        // 如果不是老師，直接扣分
+        score -= 1;
+        feedback = "不是老師，自動扣分！";
+    }
   }
 }
 
@@ -277,130 +285,16 @@ function gotFace(err, result) {
   if (result) {
     detections = result;
   }
-  // FaceAPI 的 detect() 函數內部會持續偵測，所以這裡不用再呼叫 detect()
-  // 它的偵測頻率現在由 draw 函數中的 if 條件控制
 }
 
-// 檢查玩家動作並更新分數和回饋
-function checkAction() {
-  if (actionCheckedForCurrentName) return;
+// ** 移除了 checkAction 函數及其內部所有邏輯，因為不再需要偵測動作 **
+// function checkAction() { ... }
 
-  let correctAction = false;
-  let actionDetected = false;
+// ** 移除了 isOpenMouth 函數，因為不再需要偵測嘴巴動作 **
+// function isOpenMouth() { ... }
 
-  const isCurrentTeacher = teacherList.includes(currentName);
-
-  if (isCurrentTeacher) {
-    // 如果是教科老師，期望張大嘴巴
-    if (isOpenMouth()) { // 判斷是否張大嘴巴
-      actionDetected = true;
-      feedback = "😁 成功張大嘴巴！";
-      correctAction = true;
-      score += (currentName === "陳慶帆" ? 2 : 1);
-    } else {
-      feedback = "😐 對老師要張大嘴巴才能加分喔！";
-      correctAction = false;
-      score -= (currentName === "陳慶帆" ? 3 : 1);
-    }
-  } else {
-    // 如果不是教科老師，期望比讚
-    if (isThumbsUp()) {
-      actionDetected = true;
-      feedback = "👍 這不是老師，給他個讚！";
-      correctAction = true;
-      score += 1;
-    } else {
-      feedback = "👎 這時候要比個讚啦～";
-      correctAction = false;
-      score -= 1;
-    }
-  }
-
-  if (actionDetected) {
-      actionCheckedForCurrentName = true;
-      if (detections.length > 0) {
-        let faceNose = detections[0].parts.nose[0]; 
-        correctionMarkPosition = createVector(faceNose._x, faceNose._y - 50); 
-      } else if (hands.length > 0) { 
-        let wrist = hands[0].landmarks[0]; 
-        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-      }
-      correctionMarkType = correctAction ? 'check' : 'cross';
-      showCorrectionMark = true;
-      correctionMarkStartTime = millis();
-  } else {
-      // 如果沒有偵測到有效動作 (但有人臉或手部數據)，可以給一個提示
-      if (detections.length > 0 || hands.length > 0) {
-          if (!actionCheckedForCurrentName) {
-              feedback = "請做出正確的動作！";
-          }
-      } else {
-          // 如果連臉和手都沒偵測到 (這是一個基礎的偵測不到提示，與權限無關)
-          feedback = "偵測中...請對準攝影機！";
-      }
-  }
-}
-
-// 判斷是否為張大嘴巴動作
-function isOpenMouth() {
-  if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
-    let mouth = detections[0].parts.mouth;
-    // 內上唇中點 (例如 11)
-    let innerTopLip = mouth[11];
-    // 內下唇中點 (例如 16)
-    let innerBottomLip = mouth[16];
-
-    // 外上唇中點 (例如 13)
-    let outerTopLip = mouth[13];
-    // 外下唇中點 (例如 19)
-    let outerBottomLip = mouth[19];
-
-
-    if (innerTopLip && innerBottomLip && outerTopLip && outerBottomLip) {
-      let innerVerticalDist = dist(innerTopLip._x, innerTopLip._y, innerBottomLip._x, innerBottomLip._y);
-      let outerVerticalDist = dist(outerTopLip._x, outerTopLip._y, outerBottomLip._x, outerBottomLip._y);
-
-      // 這些閾值可能需要根據實際測試調整
-      const OPEN_MOUTH_THRESHOLD_INNER = 15; 
-      const OPEN_MOUTH_THRESHOLD_OUTER = 25; 
-
-      return innerVerticalDist > OPEN_MOUTH_THRESHOLD_INNER &&
-             outerVerticalDist > OPEN_MOUTH_THRESHOLD_OUTER;
-    }
-  }
-  return false;
-}
-
-// 判斷是否為比讚動作
-function isThumbsUp() {
-  if (hands.length > 0) {
-    let landmarks = hands[0].landmarks;
-    if (landmarks.length >= 21) {
-      let thumbTip = landmarks[4];    // 拇指尖
-      let thumbMCP = landmarks[2];    // 拇指根部關節 (metacarpophalangeal joint)
-
-      let indexTip = landmarks[8];    // 食指尖
-      let middleTip = landmarks[12];  // 中指尖
-      let ringTip = landmarks[16];    // 無名指尖
-      let pinkyTip = landmarks[20];   // 小指尖
-
-      let thumbIsUp = thumbTip[1] < landmarks[9][1]; 
-      let thumbAboveBase = thumbTip[1] < thumbMCP[1];
-
-      let indexCurled = indexTip[1] > landmarks[5][1] + 10;
-      let middleCurled = middleTip[1] > landmarks[9][1] + 10;
-      let ringCurled = ringTip[1] > landmarks[13][1] + 10;   
-      let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 10; 
-
-      let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
-      
-      let thumbAsideIndex = thumbTip[0] < indexTip[0] && (indexTip[0] - thumbTip[0]) > 20;
-
-      return thumbIsUp && thumbAboveBase && allFingersCurled && thumbAsideIndex;
-    }
-  }
-  return false;
-}
+// ** 移除了 isThumbsUp 函數，因為不再需要偵測手勢動作 **
+// function isThumbsUp() { ... }
 
 // 繪製嘴巴關鍵點和連線 (淺黃色)
 function drawMouthPoints() {
