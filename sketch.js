@@ -15,7 +15,7 @@ let nameList = [
 let teacherList = ["顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴"];
 let currentName = "";      // 目前顯示的人名
 let lastSwitchTime = 0;    // 上次切換人名的時間 (millis())
-let switchInterval = 3000; // 每 3 秒切換一次人名 (3000 毫秒)
+let switchInterval = 5000; // 每 5 秒切換一次人名 (5000 毫秒)
 let feedback = "";         // 顯示給玩家的回饋訊息
 let score = 0;             // 遊戲分數
 
@@ -24,7 +24,7 @@ let boxPulse = 0;          // 人名方塊的脈動效果
 
 // 動作判斷狀態變數 (防止重複加減分)
 let actionCheckedForCurrentName = false; // 當前人名是否已檢查過動作並給分/扣分
-let actionWindowActive = false; // 新增：是否處於等待玩家動作的窗口期
+let actionWindowActive = false; // 是否處於等待玩家動作的窗口期
 
 // 視覺回饋相關變數
 let showCorrectionMark = false; // 是否顯示打勾或打叉
@@ -206,29 +206,9 @@ function draw() {
     }
   }
 
-  // 時間到自動換名字並判斷未完成動作的扣分
+  // 時間到自動換名字，不再因為未回應而扣分
   if (millis() - lastSwitchTime > switchInterval) {
-    if (actionWindowActive && !actionCheckedForCurrentName) {
-      // 在換名字前，如果這個名字的動作還沒被檢查過，就視為答錯並扣分
-      const isCurrentTeacher = teacherList.includes(currentName);
-      if (isCurrentTeacher) {
-        score -= (currentName === "陳慶帆" ? 3 : 1);
-        feedback = (currentName === "陳慶帆") ? "時間到！陳慶帆老師沒握拳扣3分！" : "時間到！老師沒握拳扣1分！";
-      } else {
-        score -= 1;
-        feedback = "時間到！不是老師沒比一指扣1分！";
-      }
-      // 顯示打叉
-      if (hands.length > 0) {
-        let wrist = hands[0].landmarks[0];
-        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-      } else {
-        correctionMarkPosition = createVector(width/2, height/2);
-      }
-      correctionMarkType = 'cross';
-      showCorrectionMark = true;
-      correctionMarkStartTime = millis();
-    }
+    // 這裡不進行未回應的扣分
     pickNewName();
   }
 }
