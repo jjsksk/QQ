@@ -14,7 +14,6 @@ let lastSwitchFrame = 0;
 let feedback = "";
 let score = 0;
 
-// 動畫參數
 let boxSize = 200;
 let boxPulse = 0;
 
@@ -25,6 +24,7 @@ function setup() {
   video.hide();
 
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
+    console.log("FaceAPI ready!");
     faceapi.detect(gotFace);
   });
 
@@ -41,7 +41,6 @@ function setup() {
 function draw() {
   image(video, 0, 0, width, height);
 
-  // 動畫縮放效果
   boxPulse = sin(frameCount * 0.05) * 10;
   let currentBoxSize = boxSize + boxPulse;
 
@@ -49,21 +48,23 @@ function draw() {
   stroke(0);
   rectMode(CENTER);
   rect(width / 2, height / 2, currentBoxSize, currentBoxSize / 2);
+
   fill(0);
   textAlign(CENTER, CENTER);
-  textSize(24);
+  textSize(28);
   text(currentName, width / 2, height / 2);
 
   fill(0, 200, 0);
-  textSize(16);
+  textSize(18);
   textAlign(LEFT);
-  text("Score: " + score, 10, 20);
+  text("Score: " + score, 10, 25);
 
   fill(255, 0, 0);
   textAlign(CENTER);
-  text(feedback, width / 2, height - 30);
+  textSize(22);
+  text(feedback, width / 2, height - 40);
 
-  if (frameCount - lastSwitchFrame > 180) {
+  if (frameCount - lastSwitchFrame > 180) { // 每3秒檢查一次動作並換名字
     checkAction();
     pickNewName();
   }
@@ -106,7 +107,7 @@ function isPouting() {
     let topLip = mouth[13];
     let bottomLip = mouth[19];
     let d = dist(topLip._x, topLip._y, bottomLip._x, bottomLip._y);
-    return d < 10;
+    return d < 10; // 嘟嘴時嘴唇距離會變小，這是簡單判斷
   }
   return false;
 }
@@ -120,6 +121,7 @@ function isThumbsUp() {
     let ringTip = landmarks[16];
     let pinkyTip = landmarks[20];
 
+    // 判斷拇指向上，且其他手指收起
     let thumbUp = thumbTip[1] < indexTip[1] &&
                   middleTip[1] > indexTip[1] &&
                   ringTip[1] > indexTip[1] &&
