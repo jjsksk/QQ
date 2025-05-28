@@ -43,9 +43,7 @@ function setup() {
 
 function draw() {
   background(250);
-  if (video.loadedmetadata) {
-    image(video, 0, 0, width, height);
-  }
+  image(video, 0, 0, width, height);
 
   boxPulse = sin(frameCount * 0.05) * 10;
   let currentBoxSize = boxSize + boxPulse;
