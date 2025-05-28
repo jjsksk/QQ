@@ -12,7 +12,7 @@ let teacherList = ["顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯�
 let currentName = "";
 let lastSwitchFrame = 0;
 let feedback = "";
-let score = 0;
+let score = 0; // 確保 score 初始值為 0
 
 let boxSize = 200;
 let boxPulse = 0;
@@ -20,38 +20,28 @@ let boxPulse = 0;
 function setup() {
   createCanvas(640, 480);
 
-  // 1. 先嘗試啟動攝影機
-  video = createCapture(VIDEO, videoReady); // 當攝影機準備好時，會呼叫 videoReady 函數
+  video = createCapture(VIDEO, videoReady);
   video.size(width, height);
   video.hide();
-
-  // 2. 在 videoReady 函數中初始化 FaceAPI 和 Handpose
-  // 這樣能確保模型在攝影機影像載入後才開始運作
-  // pickNewName() 也會移動到 videoReady 中，確保遊戲在攝影機準備好後才開始
 }
 
-// 這個函數會在攝影機成功啟動時被呼叫
 function videoReady() {
   console.log("攝影機成功啟動！");
 
-  // 初始化 FaceAPI 模型
   faceapi = ml5.faceApi(video, { withLandmarks: true, withDescriptors: false }, () => {
     console.log("FaceAPI ready!");
-    faceapi.detect(gotFace); // 開始偵測臉部
+    faceapi.detect(gotFace);
   });
 
-  // 初始化 Handpose 模型
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
   });
   handpose.on("predict", (results) => {
-    hands = results; // 更新手部偵測結果
+    hands = results;
   });
 
-  // 攝影機和模型都準備好後，選擇第一個名字並開始遊戲
   pickNewName();
 }
-
 
 function draw() {
   background(250);
@@ -60,27 +50,33 @@ function draw() {
   boxPulse = sin(frameCount * 0.05) * 10;
   let currentBoxSize = boxSize + boxPulse;
 
+  // 調整人名方塊的位置到畫面下方一些
+  let boxY = height * 0.8; // 將方塊中心設置在畫面高度的 80% 處
+
   fill(255);
   stroke(0);
   rectMode(CENTER);
-  rect(width / 2, height / 2, currentBoxSize, currentBoxSize / 2);
+  rect(width / 2, boxY, currentBoxSize, currentBoxSize / 2); // 方塊中心 Y 座標改為 boxY
 
   fill(0);
   textAlign(CENTER, CENTER);
   textSize(28);
-  text(currentName, width / 2, height / 2);
+  text(currentName, width / 2, boxY); // 文字的 Y 座標也跟著方塊移動
 
-  fill(0, 200, 0);
-  textSize(18);
-  textAlign(LEFT);
-  text("Score: " + score, 10, 25);
+  // 得分顯示
+  fill(0, 200, 0); // 綠色
+  textSize(24); // 調整文字大小，可能更容易看到
+  textAlign(LEFT, TOP); // 文字對齊方式：左上角
+  text("分數: " + score, 10, 10); // 顯示在畫布左上角，X=10, Y=10
 
-  fill(255, 0, 0);
-  textAlign(CENTER);
+  // 訊息回饋顯示
+  fill(255, 0, 0); // 紅色
+  textAlign(CENTER, BOTTOM); // 文字對齊方式：置中，靠下
   textSize(22);
-  text(feedback, width / 2, height - 40);
+  text(feedback, width / 2, height - 10); // 顯示在畫布底部，Y=height-10
 
   // 每隔 3 秒 (180 幀) 檢查一次動作並切換名字
+  // (假設 frameRate 是 60 幀/秒，180 幀就是 3 秒)
   if (frameCount - lastSwitchFrame > 180) {
     checkAction();
     pickNewName();
@@ -90,18 +86,23 @@ function draw() {
 function pickNewName() {
   currentName = random(nameList);
   lastSwitchFrame = frameCount;
-  feedback = ""; // 清空之前的提示訊息
+  feedback = "";
 }
 
 function gotFace(err, result) {
   if (result) {
     detections = result;
   }
-  // 每次偵測到臉部後，繼續下一輪偵測
   faceapi.detect(gotFace);
 }
 
 function checkAction() {
+  // 檢查是否有足夠的偵測數據才進行判斷
+  if (detections.length === 0 && hands.length === 0) {
+      feedback = "偵測中...請對準攝影機！";
+      return; // 如果沒有偵測到臉或手，不執行後續判斷
+  }
+
   if (teacherList.includes(currentName)) {
     // 如果是教科老師
     if (isPouting()) {
@@ -122,43 +123,45 @@ function checkAction() {
 }
 
 function isPouting() {
-  // 檢查是否有臉部偵測結果且有嘴巴部位
   if (detections.length > 0 && detections[0].parts && detections[0].parts.mouth) {
     let mouth = detections[0].parts.mouth;
-    // 嘴唇的上方點和下方點 (這些索引是根據 ml5.faceApi 返回的臉部關鍵點結構)
-    let topLip = mouth[13]; // 通常是上唇中點偏上
-    let bottomLip = mouth[19]; // 通常是下唇中點偏下
-    
+    let topLip = mouth[13];
+    let bottomLip = mouth[19];
     if (topLip && bottomLip) {
-      // 計算上唇和下唇之間的距離
       let d = dist(topLip._x, topLip._y, bottomLip._x, bottomLip._y);
-      // 如果距離很小，表示嘴巴可能嘟起來了
-      return d < 10; // 這個閾值可能需要根據實際測試調整
+      // 嘟嘴的距離判斷可能需要微調，這裡給一個參考值
+      return d < 10;
     }
   }
   return false;
 }
 
 function isThumbsUp() {
-  // 檢查是否有手部偵測結果
   if (hands.length > 0) {
-    let landmarks = hands[0].landmarks; // 取第一隻手的手部關鍵點
-    if (landmarks.length >= 21) { // 確保有完整 21 個關鍵點
-      // 手指關鍵點的索引 (拇指指尖、食指指尖等)
+    let landmarks = hands[0].landmarks;
+    if (landmarks.length >= 21) {
       let thumbTip = landmarks[4];
       let indexTip = landmarks[8];
       let middleTip = landmarks[12];
       let ringTip = landmarks[16];
       let pinkyTip = landmarks[20];
 
-      // 判斷是否為比讚手勢：
-      // 拇指尖Y座標高於食指尖Y座標 (拇指向上)
-      // 其他三指尖Y座標低於食指尖Y座標 (其他三指彎曲或向下)
-      let thumbUp = thumbTip[1] < indexTip[1] &&  // 拇指尖 Y 座標小於食指尖 (表示拇指比食指高)
-                      middleTip[1] > indexTip[1] && // 中指尖 Y 座標大於食指尖 (表示中指比食指低)
-                      ringTip[1] > indexTip[1] &&   // 無名指尖 Y 座標大於食指尖
-                      pinkyTip[1] > indexTip[1];    // 小指尖 Y 座標大於食指尖
-      return thumbUp;
+      // 判斷比讚手勢的邏輯 (拇指向上，其他手指彎曲)
+      // 檢查拇指尖 Y 座標是否顯著低於其他指尖 Y 座標 (在圖片座標系中，Y 值越小越往上)
+      let thumbUp = thumbTip[1] < indexTip[1] &&
+                      thumbTip[1] < middleTip[1] &&
+                      thumbTip[1] < ringTip[1] &&
+                      thumbTip[1] < pinkyTip[1];
+      
+      // 並且確保其他四指是「彎曲」狀態 (例如，指尖Y座標大於指關節Y座標)
+      // 這裡只做簡化判斷，更精確需要更多判斷，但這個應該能初步判斷
+      let fingersCurled = indexTip[1] > landmarks[6][1] && // 食指尖 Y > 食指中關節 Y
+                          middleTip[1] > landmarks[10][1] && // 中指尖 Y > 中指中關節 Y
+                          ringTip[1] > landmarks[14][1] && // 無名指尖 Y > 無名指中關節 Y
+                          pinkyTip[1] > landmarks[18][1]; // 小指尖 Y > 小指中關節 Y
+
+      // 結合拇指向上和其他手指彎曲的判斷
+      return thumbUp && fingersCurled;
     }
   }
   return false;
