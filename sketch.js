@@ -24,6 +24,7 @@ let boxPulse = 0;          // 人名方塊的脈動效果
 
 // 動作判斷狀態變數 (防止重複加減分)
 let actionCheckedForCurrentName = false; // 當前人名是否已檢查過動作並給分/扣分
+let actionWindowActive = false; // 新增：是否處於等待玩家動作的窗口期
 
 // 視覺回饋相關變數
 let showCorrectionMark = false; // 是否顯示打勾或打叉
@@ -35,7 +36,7 @@ let correctionMarkStartTime;    // 打勾或打叉開始顯示的時間
 
 // 偵測頻率控制變數
 let lastHandDetectTime = 0;
-let handDetectInterval = 100; // 每 100 毫秒進行一次手勢偵測 (約 10 FPS)
+let handDetectInterval = 50; // 更頻繁地偵測手勢 (約 20 FPS)
 
 
 function setup() {
@@ -86,17 +87,16 @@ function showStartScreen() {
 function videoReady() {
   console.log("攝影機成功啟動！");
 
-  // 僅初始化 Handpose
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
-    checkModelsLoaded(); // 現在只依賴 Handpose 載入完成
+    checkModelsLoaded();
   });
 }
 
 function checkModelsLoaded() {
   let handposeReady = handpose && handpose.ready;
 
-  if (handposeReady) { // 只依賴 Handpose 載入完成
+  if (handposeReady) {
     gameModelsLoaded = true;
     showStartScreen();
   }
@@ -111,7 +111,7 @@ function startGame() {
   console.log("遊戲開始！");
   gameStarted = true;
   startTime = millis();
-  pickNewName();
+  pickNewName(); // 第一次選取名字並啟動動作偵測窗口
   
   if (gameInterval) clearInterval(gameInterval);
   gameInterval = setInterval(() => {
@@ -169,14 +169,17 @@ function draw() {
   if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
     handpose.predict(video).then(results => {
       hands = results;
+      // 在手部數據更新後立即嘗試檢查動作
+      if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0) {
+        checkAction();
+      }
     });
     lastHandDetectTime = millis();
+  } else if (hands.length === 0) {
+    // 如果沒有偵測到手，提示用戶對準攝影機
+    feedback = "偵測中...請對準攝影機！";
   }
 
-  // 動作偵測和判斷
-  if (!actionCheckedForCurrentName && hands.length > 0) { // 只在手部有數據且未檢查過才檢查動作
-    checkAction();
-  }
 
   drawHandLandmarks(); // 只繪製手部關節點
 
@@ -203,9 +206,30 @@ function draw() {
     }
   }
 
+  // 時間到自動換名字並判斷未完成動作的扣分
   if (millis() - lastSwitchTime > switchInterval) {
+    if (actionWindowActive && !actionCheckedForCurrentName) {
+      // 在換名字前，如果這個名字的動作還沒被檢查過，就視為答錯並扣分
+      const isCurrentTeacher = teacherList.includes(currentName);
+      if (isCurrentTeacher) {
+        score -= (currentName === "陳慶帆" ? 3 : 1);
+        feedback = (currentName === "陳慶帆") ? "時間到！陳慶帆老師沒握拳扣3分！" : "時間到！老師沒握拳扣1分！";
+      } else {
+        score -= 1;
+        feedback = "時間到！不是老師沒比一指扣1分！";
+      }
+      // 顯示打叉
+      if (hands.length > 0) {
+        let wrist = hands[0].landmarks[0];
+        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
+      } else {
+        correctionMarkPosition = createVector(width/2, height/2);
+      }
+      correctionMarkType = 'cross';
+      showCorrectionMark = true;
+      correctionMarkStartTime = millis();
+    }
     pickNewName();
-    actionCheckedForCurrentName = false;
   }
 }
 
@@ -225,6 +249,7 @@ function endGame() {
   feedback = "";
   hands = [];
   currentName = ""; // 清空顯示的人名
+  actionWindowActive = false; // 遊戲結束時重置
 
   let startButton = select('#startButton');
   if (startButton) {
@@ -239,13 +264,15 @@ function pickNewName() {
   lastSwitchTime = millis();
   feedback = "";
   actionCheckedForCurrentName = false;
+  actionWindowActive = true; // 新名字出現，動作窗口開啟
 }
 
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
-  if (actionCheckedForCurrentName || hands.length === 0) return; // 如果已檢查過或沒有手部數據，則不檢查
+  // 只有在動作窗口開啟且該名字的動作尚未被檢查過時才執行
+  if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0) return;
 
-  let actionDetected = false; // 用於判斷是否有偵測到「有效」的動作嘗試 (無論對錯)
+  let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或一根手指)
   let correctAction = false;
 
   const isCurrentTeacher = teacherList.includes(currentName);
@@ -253,43 +280,33 @@ function checkAction() {
   if (isCurrentTeacher) {
     // 如果是教科老師，期望握拳
     if (isFistClosed()) {
-      actionDetected = true;
+      actionMade = true;
       correctAction = true;
       score += (currentName === "陳慶帆" ? 2 : 1);
       feedback = (currentName === "陳慶帆") ? "👊 陳慶帆老師來了！握拳加倍加分！" : "👊 老師來了！握拳加分！";
     } else if (isOneFingerUp()) { // 錯誤動作也算作一次嘗試
-      actionDetected = true;
-      feedback = "😐 對老師要握拳才能加分喔！";
+      actionMade = true;
       correctAction = false;
       score -= (currentName === "陳慶帆" ? 3 : 1);
-    } else {
-      // 老師出現但沒有明確的握拳或一根手指動作，不加減分，但仍視為已嘗試
-      actionDetected = true;
-      feedback = "請握拳！";
-      correctAction = false; // 動作不正確
+      feedback = "😐 對老師要握拳才能加分喔！";
     }
   } else {
     // 如果不是教科老師，期望比一根手指
     if (isOneFingerUp()) {
-      actionDetected = true;
-      feedback = "👆 這不是老師，給他一根手指！";
+      actionMade = true;
       correctAction = true;
+      feedback = "👆 這不是老師，給他一根手指！";
       score += 1;
     } else if (isFistClosed()) { // 錯誤動作也算作一次嘗試
-      actionDetected = true;
-      feedback = "🖐️ 這時候要比一根手指啦～";
+      actionMade = true;
       correctAction = false;
+      feedback = "🖐️ 這時候要比一根手指啦～";
       score -= 1;
-    } else {
-      // 非老師出現但沒有明確的握拳或一根手指動作，不加減分，但仍視為已嘗試
-      actionDetected = true;
-      feedback = "請比一根手指！";
-      correctAction = false; // 動作不正確
     }
   }
 
-  // 顯示打勾或打叉的視覺回饋
-  if (actionDetected) { // 只要有偵測到任一有效動作（握拳或一根手指），就顯示回饋
+  // 如果成功偵測到任何有效動作，就給予回饋並標記已檢查
+  if (actionMade) {
     actionCheckedForCurrentName = true; // 標記為已檢查，防止重複加減分
     let wrist = hands[0].landmarks[0];  // 使用手腕作為回饋位置參考
     correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
@@ -317,12 +334,8 @@ function isFistClosed() {
       let ringClose = ringTip[1] > landmarks[13][1] + 20;    // 無名指尖在根部下方
       let pinkyClose = pinkyTip[1] > landmarks[17][1] + 20; // 小指尖在根部下方
 
-      // 檢查手指尖端與手掌中心的距離，確保他們是彎曲的
-      let palmBase = landmarks[0]; // 腕部作為手掌中心參考
-
       let allFingersCurled = indexClose && middleClose && ringClose && pinkyClose;
 
-      // 此外，拇指尖通常會碰到或接近中指的第一個關節 (landmarks[10])
       let thumbToMiddleProximity = dist(thumbTip[0], thumbTip[1], landmarks[10][0], landmarks[10][1]) < 40;
 
       return allFingersCurled && thumbClose && thumbToMiddleProximity;
@@ -348,14 +361,12 @@ function isOneFingerUp() {
       let wrist = landmarks[0];        // 腕部
 
       // 1. 食指是直的且朝上 (相對腕部)
-      // 檢查食指各關節點的 Y 座標是否遞減 (由下而上)
       let indexIsUpAndStraight = (indexTip[1] < indexPIP[1]) &&
                                  (indexPIP[1] < indexMCP[1]) &&
                                  (indexMCP[1] < wrist[1]);
       
-      // 確保食指的尖端離腕部有足夠的距離，且食指X座標在一定範圍內，避免手部傾斜誤判
       let indexVerticalDist = dist(indexTip[0], indexTip[1], wrist[0], wrist[1]);
-      const MIN_INDEX_VERTICAL_DIST = 50; // 食指和腕部最小垂直距離
+      const MIN_INDEX_VERTICAL_DIST = 50;
       
       // 2. 其他手指都彎曲 (尖端低於各自的MCP關節 + 一些裕度)
       let thumbCurled = thumbTip[1] > landmarks[3][1] + 15; // 拇指尖低於拇指倒數第二個關節
@@ -371,7 +382,7 @@ function isOneFingerUp() {
       return indexIsUpAndStraight &&
              indexVerticalDist > MIN_INDEX_VERTICAL_DIST &&
              thumbCurled && middleCurled && ringCurled && pinkyCurled &&
-             middleXCheck && ringXCheck && pinkyXCheck; // 增加X座標檢查
+             middleXCheck && ringXCheck && pinkyXCheck;
     }
   }
   return false;
