@@ -165,18 +165,19 @@ function draw() {
   textSize(22);
   text(feedback, width / 2, height - 10);
 
-  // 限制手勢偵測頻率
+
+  // 偵測頻率控制變數
   if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
     handpose.predict(video).then(results => {
       hands = results;
-      // 在手部數據更新後立即嘗試檢查動作
+      // 在這裡添加一行：
+      console.log("偵測到的手部數量:", hands.length); // 加入這行
       if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0) {
         checkAction();
       }
     });
     lastHandDetectTime = millis();
   } else if (hands.length === 0) {
-    // 如果沒有偵測到手，提示用戶對準攝影機
     feedback = "偵測中...請對準攝影機！";
   }
 
