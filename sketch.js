@@ -1,5 +1,5 @@
 let video;
-let hands = [];     // 儲存手部偵測結果
+let hands = [];      // 儲存手部偵測結果
 
 // 遊戲狀態變數
 let gameStarted = false; // 遊戲是否開始
@@ -174,7 +174,7 @@ function draw() {
   }
 
   // 動作偵測和判斷
-  if (!actionCheckedForCurrentName) {
+  if (!actionCheckedForCurrentName && hands.length > 0) { // 只在手部有數據且未檢查過才檢查動作
     checkAction();
   }
 
@@ -243,32 +243,30 @@ function pickNewName() {
 
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
-  if (actionCheckedForCurrentName) return;
+  if (actionCheckedForCurrentName || hands.length === 0) return; // 如果已檢查過或沒有手部數據，則不檢查
 
+  let actionDetected = false; // 用於判斷是否有偵測到「有效」的動作嘗試 (無論對錯)
   let correctAction = false;
-  let actionDetected = false;
 
   const isCurrentTeacher = teacherList.includes(currentName);
 
   if (isCurrentTeacher) {
     // 如果是教科老師，期望握拳
-    if (isFistClosed()) { 
+    if (isFistClosed()) {
       actionDetected = true;
       correctAction = true;
       score += (currentName === "陳慶帆" ? 2 : 1);
       feedback = (currentName === "陳慶帆") ? "👊 陳慶帆老師來了！握拳加倍加分！" : "👊 老師來了！握拳加分！";
-    } else {
-      // 老師出現但沒握拳
+    } else if (isOneFingerUp()) { // 錯誤動作也算作一次嘗試
+      actionDetected = true;
       feedback = "😐 對老師要握拳才能加分喔！";
       correctAction = false;
       score -= (currentName === "陳慶帆" ? 3 : 1);
-      if (hands.length > 0) { // 如果有手部才顯示打叉
-        let wrist = hands[0].landmarks[0]; 
-        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-        correctionMarkType = 'cross';
-        showCorrectionMark = true;
-        correctionMarkStartTime = millis();
-      }
+    } else {
+      // 老師出現但沒有明確的握拳或一根手指動作，不加減分，但仍視為已嘗試
+      actionDetected = true;
+      feedback = "請握拳！";
+      correctAction = false; // 動作不正確
     }
   } else {
     // 如果不是教科老師，期望比一根手指
@@ -277,47 +275,27 @@ function checkAction() {
       feedback = "👆 這不是老師，給他一根手指！";
       correctAction = true;
       score += 1;
-    } else {
-      // 非老師出現但沒比一根手指
+    } else if (isFistClosed()) { // 錯誤動作也算作一次嘗試
+      actionDetected = true;
       feedback = "🖐️ 這時候要比一根手指啦～";
       correctAction = false;
       score -= 1;
-      if (hands.length > 0) {
-        let wrist = hands[0].landmarks[0]; 
-        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-        correctionMarkType = 'cross';
-        showCorrectionMark = true;
-        correctionMarkStartTime = millis();
-      }
+    } else {
+      // 非老師出現但沒有明確的握拳或一根手指動作，不加減分，但仍視為已嘗試
+      actionDetected = true;
+      feedback = "請比一根手指！";
+      correctAction = false; // 動作不正確
     }
   }
 
-  // 如果成功偵測到正確的動作，顯示打勾
-  if (actionDetected && correctAction) {
-      actionCheckedForCurrentName = true;
-      if (hands.length > 0) {
-        let wrist = hands[0].landmarks[0]; 
-        correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-      } else {
-        // 如果沒有偵測到手，打勾/叉位置默認在畫面中心
-        correctionMarkPosition = createVector(width/2, height/2);
-      }
-      correctionMarkType = 'check';
-      showCorrectionMark = true;
-      correctionMarkStartTime = millis();
-  } else if (!actionDetected && hands.length > 0) {
-    // 如果有偵測到手，但沒有成功做出預期動作
-    feedback = "請做出正確的動作！";
-    return; // 不設定 actionCheckedForCurrentName，允許重複判斷
-  }
-
-  // 如果偵測到動作，無論對錯都標記為已檢查，防止重複加減分
-  if (actionDetected || hands.length > 0) { // 只要有手部數據就視為已嘗試動作
-      actionCheckedForCurrentName = true;
-  } else {
-    // 如果連手都沒偵測到，提示用戶對準攝影機
-    feedback = "偵測中...請對準攝影機！";
-    actionCheckedForCurrentName = false; // 允許重複判斷
+  // 顯示打勾或打叉的視覺回饋
+  if (actionDetected) { // 只要有偵測到任一有效動作（握拳或一根手指），就顯示回饋
+    actionCheckedForCurrentName = true; // 標記為已檢查，防止重複加減分
+    let wrist = hands[0].landmarks[0];  // 使用手腕作為回饋位置參考
+    correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
+    correctionMarkType = correctAction ? 'check' : 'cross';
+    showCorrectionMark = true;
+    correctionMarkStartTime = millis();
   }
 }
 
@@ -336,7 +314,7 @@ function isFistClosed() {
       let thumbClose = dist(thumbTip[0], thumbTip[1], landmarks[5][0], landmarks[5][1]) < 40; // 拇指尖靠近食指根部
       let indexClose = indexTip[1] > landmarks[5][1] + 20; // 食指尖在根部下方
       let middleClose = middleTip[1] > landmarks[9][1] + 20; // 中指尖在根部下方
-      let ringClose = ringTip[1] > landmarks[13][1] + 20;   // 無名指尖在根部下方
+      let ringClose = ringTip[1] > landmarks[13][1] + 20;    // 無名指尖在根部下方
       let pinkyClose = pinkyTip[1] > landmarks[17][1] + 20; // 小指尖在根部下方
 
       // 檢查手指尖端與手掌中心的距離，確保他們是彎曲的
@@ -359,20 +337,20 @@ function isOneFingerUp() {
   if (hands.length > 0) {
     let landmarks = hands[0].landmarks;
     if (landmarks.length >= 21) {
-      let indexTip = landmarks[8];    // 食指尖
-      let indexPIP = landmarks[6];    // 食指中間關節
-      let indexMCP = landmarks[5];    // 食指根部關節
+      let indexTip = landmarks[8];     // 食指尖
+      let indexPIP = landmarks[6];     // 食指中間關節
+      let indexMCP = landmarks[5];     // 食指根部關節
 
-      let thumbTip = landmarks[4];    // 拇指尖
-      let middleTip = landmarks[12];  // 中指尖
-      let ringTip = landmarks[16];  // 無名指尖
-      let pinkyTip = landmarks[20];   // 小指尖
-      let wrist = landmarks[0];     // 腕部
+      let thumbTip = landmarks[4];     // 拇指尖
+      let middleTip = landmarks[12];   // 中指尖
+      let ringTip = landmarks[16];     // 無名指尖
+      let pinkyTip = landmarks[20];    // 小指尖
+      let wrist = landmarks[0];        // 腕部
 
       // 1. 食指是直的且朝上 (相對腕部)
       // 檢查食指各關節點的 Y 座標是否遞減 (由下而上)
-      let indexIsUpAndStraight = (indexTip[1] < indexPIP[1]) && 
-                                 (indexPIP[1] < indexMCP[1]) && 
+      let indexIsUpAndStraight = (indexTip[1] < indexPIP[1]) &&
+                                 (indexPIP[1] < indexMCP[1]) &&
                                  (indexMCP[1] < wrist[1]);
       
       // 確保食指的尖端離腕部有足夠的距離，且食指X座標在一定範圍內，避免手部傾斜誤判
@@ -381,16 +359,16 @@ function isOneFingerUp() {
       
       // 2. 其他手指都彎曲 (尖端低於各自的MCP關節 + 一些裕度)
       let thumbCurled = thumbTip[1] > landmarks[3][1] + 15; // 拇指尖低於拇指倒數第二個關節
-      let middleCurled = middleTip[1] > landmarks[9][1] + 15; 
-      let ringCurled = ringTip[1] > landmarks[13][1] + 15;   
+      let middleCurled = middleTip[1] > landmarks[9][1] + 15;
+      let ringCurled = ringTip[1] > landmarks[13][1] + 15;    
       let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 15; 
 
       // 檢查其他手指的X座標是否靠近手掌中心，表示彎曲
-      let middleXCheck = Math.abs(middleTip[0] - landmarks[9][0]) < 20; 
+      let middleXCheck = Math.abs(middleTip[0] - landmarks[9][0]) < 20;
       let ringXCheck = Math.abs(ringTip[0] - landmarks[13][0]) < 20;
       let pinkyXCheck = Math.abs(pinkyTip[0] - landmarks[17][0]) < 20;
       
-      return indexIsUpAndStraight && 
+      return indexIsUpAndStraight &&
              indexVerticalDist > MIN_INDEX_VERTICAL_DIST &&
              thumbCurled && middleCurled && ringCurled && pinkyCurled &&
              middleXCheck && ringXCheck && pinkyXCheck; // 增加X座標檢查
