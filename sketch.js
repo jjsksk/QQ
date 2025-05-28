@@ -45,28 +45,36 @@ function setup() {
 
   // 顯示開始遊戲按鈕或提示
   showStartScreen();
+
+  // ***** 這兩行是要添加在這裡！ *****
+  // 選擇 HTML 中的按鈕，並設置點擊事件
+  let startButton = select('#startButton');
+  // 檢查按鈕是否存在，避免找不到元素時報錯
+  if (startButton) {
+    startButton.mousePressed(startGame);
+  } else {
+    console.error("錯誤：找不到 ID 為 'startButton' 的 HTML 按鈕！");
+    console.error("請確認你的 index.html 檔案中有 <button id='startButton'>...</button>");
+  }
 }
 
-// 顯示遊戲開始畫面
+// 顯示遊戲開始畫面 (此函數本身定義在 setup 外部)
 function showStartScreen() {
   background(220);
   fill(0);
   textSize(32);
-  text("點擊開始遊戲", width / 2, height / 2 - 50);
+  text("準備開始...", width / 2, height / 2 - 50);
   textSize(20);
   text("（請允許攝影機權限）", width / 2, height / 2);
   
-  // 在這裡可以加一個按鈕，讓玩家點擊後才開始遊戲
-  // 為了簡化，目前設定成滑鼠點擊任意處開始
-}
-
-function mousePressed() {
-  if (!gameStarted) {
-    startGame();
+  // 顯示按鈕 (確保按鈕可見)
+  let startButton = select('#startButton');
+  if (startButton) {
+    startButton.style('display', 'block');
   }
 }
 
-
+// 這個函數會在攝影機成功啟動時被呼叫
 function videoReady() {
   console.log("攝影機成功啟動！");
 
@@ -85,7 +93,9 @@ function videoReady() {
   });
 }
 
+// 遊戲開始函數 (此函數本身定義在 setup 外部)
 function startGame() {
+  console.log("遊戲開始！"); // 新增一個 console.log 方便確認
   gameStarted = true;
   startTime = millis(); // 記錄遊戲開始時間
   pickNewName();       // 選擇第一個名字
@@ -98,6 +108,12 @@ function startGame() {
       endGame(); // 遊戲結束
     }
   }, 1000); // 每 1000 毫秒 (1 秒) 執行一次
+
+  // 遊戲開始後隱藏按鈕
+  let startButton = select('#startButton');
+  if (startButton) {
+    startButton.style('display', 'none');
+  }
 }
 
 
@@ -147,10 +163,10 @@ function draw() {
   textSize(22);
   text(feedback, width / 2, height - 10);
 
-  // 繪製偵測到的臉部關鍵點 (用於除錯，可移除)
-   drawDetections();
-  // 繪製偵測到的手部關鍵點 (用於除錯，可移除)
-   drawHands();
+  // 繪製偵測到的臉部關鍵點 (用於除錯，可移除註解)
+  // drawDetections();
+  // 繪製偵測到的手部關鍵點 (用於除錯，可移除註解)
+  // drawHands();
 
   // 顯示打勾或打叉的視覺回饋
   if (showCorrectionMark) {
@@ -203,6 +219,14 @@ function endGame() {
   feedback = "";
   detections = [];
   hands = [];
+
+  // 讓按鈕重新顯示以便重新開始
+  let startButton = select('#startButton');
+  if (startButton) {
+    startButton.style('display', 'block');
+    startButton.html('重新開始遊戲'); // 修改按鈕文字
+    startButton.mousePressed(startGame); // 重新綁定事件，防止在遊戲結束後重複點擊觸發問題
+  }
 }
 
 // 選擇新名字
@@ -228,6 +252,7 @@ function checkAction() {
   // 偵測到臉部或手部才進行判斷
   if (detections.length === 0 && hands.length === 0) {
       feedback = "偵測中...請對準攝影機！";
+      // 如果沒有偵測到任何東西，也不觸發分數變動和回饋標記
       return;
   }
 
@@ -259,13 +284,15 @@ function checkAction() {
   // 處理視覺回饋 (打勾或打叉)
   if (detections.length > 0) {
     // 假設打勾打叉顯示在頭部上方
-    let faceCenter = detections[0].parts.nose[0]; // 鼻子位置作為臉部中心參考
-    correctionMarkPosition = createVector(faceCenter._x, faceCenter._y - 50); // 稍微往上移
+    // 取得臉部中央點的估計位置 (例如鼻子)
+    let faceNose = detections[0].parts.nose[0]; 
+    correctionMarkPosition = createVector(faceNose._x, faceNose._y - 50); // 稍微往上移
     correctionMarkType = correctAction ? 'check' : 'cross';
     showCorrectionMark = true;
     correctionMarkStartTime = millis(); // 記錄開始顯示時間
   } else if (hands.length > 0) { // 如果只偵測到手，沒有臉
-    let wrist = hands[0].landmarks[0]; // 手腕作為參考
+    // 取得手腕位置作為參考點
+    let wrist = hands[0].landmarks[0]; 
     correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
     correctionMarkType = correctAction ? 'check' : 'cross';
     showCorrectionMark = true;
@@ -318,7 +345,8 @@ function isThumbsUp() {
       // 3. 確保拇指和食指之間有足夠的角度 (防止只是把手伸直)
       // 這可以用拇指和食指的向量點積來判斷，或者簡單判斷它們在X軸上的相對位置
       // 假設拇指在食指的左側 (對於右手)
-      let thumbAsideIndex = thumbTip[0] < indexTip[0]; // 拇指X小於食指X
+      // 這是一個簡易的判斷，如果偵測不準確，可能需要更複雜的幾何判斷
+      let thumbAsideIndex = thumbTip[0] < indexTip[0]; 
 
       return thumbIsUp && allFingersCurled && thumbAsideIndex;
     }
@@ -326,25 +354,22 @@ function isThumbsUp() {
   return false;
 }
 
-// 繪製臉部偵測結果 (用於除錯，可移除)
+// 繪製臉部偵測結果 (用於除錯，預設註解)
 function drawDetections() {
   for (let i = 0; i < detections.length; i++) {
     const detection = detections[i];
-    // 繪製臉部框
     noFill();
     stroke(161, 95, 251);
     strokeWeight(2);
     let box = detection.box;
     rect(box.x, box.y, box.width, box.height);
 
-    // 繪製臉部關鍵點
     noStroke();
     fill(161, 95, 251);
     for (let j = 0; j < detection.landmarks.length; j++) {
       let p = detection.landmarks[j];
       ellipse(p._x, p._y, 5, 5);
     }
-    // 繪製嘴巴關鍵點
     fill(255, 0, 0); // 紅色
     if (detection.parts && detection.parts.mouth) {
         for (let p of detection.parts.mouth) {
@@ -354,7 +379,7 @@ function drawDetections() {
   }
 }
 
-// 繪製手部偵測結果 (用於除錯，可移除)
+// 繪製手部偵測結果 (用於除錯，預設註解)
 function drawHands() {
   for (let i = 0; i < hands.length; i++) {
     let hand = hands[i];
@@ -364,33 +389,25 @@ function drawHands() {
       noStroke();
       ellipse(landmark[0], landmark[1], 10, 10);
     }
-    // 連接手部骨架 (可選)
     stroke(0, 255, 0);
     strokeWeight(2);
+    // 繪製骨架連接線 (省略部分，可以參考之前提供的完整骨架連接代碼)
     // 拇指
     line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[1][0], hand.landmarks[1][1]);
     line(hand.landmarks[1][0], hand.landmarks[1][1], hand.landmarks[2][0], hand.landmarks[2][1]);
     line(hand.landmarks[2][0], hand.landmarks[2][1], hand.landmarks[3][0], hand.landmarks[3][1]);
     line(hand.landmarks[3][0], hand.landmarks[3][1], hand.landmarks[4][0], hand.landmarks[4][1]);
-    // 食指
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]);
-    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[6][0], hand.landmarks[6][1]);
-    line(hand.landmarks[6][0], hand.landmarks[6][1], hand.landmarks[7][0], hand.landmarks[7][1]);
-    line(hand.landmarks[7][0], hand.landmarks[7][1], hand.landmarks[8][0], hand.landmarks[8][1]);
-    // 中指
-    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[10][0], hand.landmarks[10][1]);
-    line(hand.landmarks[10][0], hand.landmarks[10][1], hand.landmarks[11][0], hand.landmarks[11][1]);
-    line(hand.landmarks[11][0], hand.landmarks[11][1], hand.landmarks[12][0], hand.landmarks[12][1]);
-    // 無名指
-    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[14][0], hand.landmarks[14][1]);
-    line(hand.landmarks[14][0], hand.landmarks[14][1], hand.landmarks[15][0], hand.landmarks[15][1]);
-    line(hand.landmarks[15][0], hand.landmarks[15][1], hand.landmarks[16][0], hand.landmarks[16][1]);
-    // 小指
-    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[18][0], hand.landmarks[18][1]);
-    line(hand.landmarks[18][0], hand.landmarks[18][1], hand.landmarks[19][0], hand.landmarks[19][1]);
-    line(hand.landmarks[19][0], hand.landmarks[19][1], hand.landmarks[20][0], hand.landmarks[20][1]);
+    // 食指到小指的連接 (簡化)
+    for (let f = 0; f < 4; f++) { // 4 根手指 (食指到小指)
+        let startIndex = 5 + f * 4;
+        for (let j = 0; j < 3; j++) {
+            line(hand.landmarks[startIndex + j][0], hand.landmarks[startIndex + j][1], 
+                 hand.landmarks[startIndex + j + 1][0], hand.landmarks[startIndex + j + 1][1]);
+        }
+    }
     // 手掌連接
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[9][0], hand.landmarks[9][1]);
+    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]);
+    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[9][0], hand.landmarks[9][1]);
     line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[13][0], hand.landmarks[13][1]);
     line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[17][0], hand.landmarks[17][1]);
     line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[0][0], hand.landmarks[0][1]);
