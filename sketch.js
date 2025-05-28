@@ -172,13 +172,18 @@ function draw() {
     handpose.predict(video).then(results => {
       hands = results;
 
-      // ======== 為了更詳細的偵錯，可以在這裡添加以下內容 ========
+      // ======== 為了更詳細的偵錯，取消註解以下內容 ========
       // if (hands.length > 0) {
       //   console.log("偵測到手部！數量:", hands.length);
       //   console.log("手勢判斷 - 握拳:", isFistClosed());
       //   console.log("手勢判斷 - 攤開:", isOpenHand());
-      //   // 如果需要更詳細的關節點數據來調試，可以打開這行
-      //   // console.log("手部關節點:", hands[0].landmarks);
+      //   let landmarks = hands[0].landmarks;
+      //   if(landmarks){
+      //       console.log("食指尖 Y:", landmarks[8][1], "食指MCP Y:", landmarks[5][1]);
+      //       console.log("中指尖 Y:", landmarks[12][1], "中指MCP Y:", landmarks[9][1]);
+      //       console.log("拇指尖 Y:", landmarks[4][1], "拇指MCP Y:", landmarks[1][1]);
+      //       console.log("食指X:", landmarks[8][0], "中指X:", landmarks[12][0], "無名指X:", landmarks[16][0], "小指X:", landmarks[20][0]);
+      //   }
       // } else {
       //   console.log("未偵測到手部。");
       // }
@@ -273,14 +278,25 @@ function checkAction() {
 
   const isCurrentTeacher = teacherList.includes(currentName);
 
+  // 偵測兩種手勢
+  const hasFist = isFistClosed();
+  const hasOpenHand = isOpenHand();
+
+  // 如果同時偵測到兩種手勢，這可能是模糊情況，或兩者都不是明確的動作，可以考慮不做判斷或視為無效
+  if (hasFist && hasOpenHand) {
+      feedback = "手勢模糊，請明確動作！";
+      // 這裡不給分也不扣分，等待更明確的動作
+      return; 
+  }
+
   if (isCurrentTeacher) {
     // 如果是教科老師，期望握拳
-    if (isFistClosed()) {
+    if (hasFist) { // 正確動作：握拳
       actionMade = true;
       correctAction = true;
       score += (currentName === "陳慶帆" ? 2 : 1); // 陳慶帆老師答對加2分，其他老師加1分
       feedback = (currentName === "陳慶帆") ? "👊 陳慶帆老師來了！握拳加倍加分！" : "👊 老師來了！握拳加分！";
-    } else if (isOpenHand()) { // 錯誤動作（攤開）也算作一次嘗試
+    } else if (hasOpenHand) { // 錯誤動作：攤開
       actionMade = true;
       correctAction = false;
       score -= (currentName === "陳慶帆" ? 3 : 1); // 陳慶帆老師答錯扣3分，其他老師扣1分
@@ -288,12 +304,12 @@ function checkAction() {
     }
   } else {
     // 如果不是教科老師，期望攤開手
-    if (isOpenHand()) {
+    if (hasOpenHand) { // 正確動作：攤開
       actionMade = true;
       correctAction = true;
       feedback = "🖐️ 這不是老師，給他攤開手！加1分！";
       score += 1;
-    } else if (isFistClosed()) { // 錯誤動作（握拳）也算作一次嘗試
+    } else if (hasFist) { // 錯誤動作：握拳
       actionMade = true;
       correctAction = false;
       feedback = "👊 這時候要攤開手啦～扣1分！";
@@ -317,27 +333,24 @@ function isFistClosed() {
   if (hands.length > 0) {
     let landmarks = hands[0].landmarks;
     if (landmarks.length >= 21) {
-      // 檢查所有手指尖端是否都靠近手掌中心或其根部關節
-      let thumbTip = landmarks[4];
-      let indexTip = landmarks[8];
-      let middleTip = landmarks[12];
-      let ringTip = landmarks[16];
-      let pinkyTip = landmarks[20];
+      // 檢查所有手指尖端是否都明顯低於其各自的掌指關節 (MCP) Y座標
+      // 這個閾值可能需要微調，因為 Y 座標越「大」表示越下方
+      const THRESHOLD_CURLED = 20; // 尖端 Y 座標比 MCP Y 座標大於此值，表示彎曲
 
-      // 檢查食指、中指、無名指、小指尖是否低於各自的掌指關節 (MCP)
-      // 增加一點裕度，讓判斷更寬鬆
-      let indexCurled = indexTip[1] > landmarks[5][1] + 10;
-      let middleCurled = middleTip[1] > landmarks[9][1] + 10;
-      let ringCurled = ringTip[1] > landmarks[13][1] + 10;
-      let pinkyCurled = pinkyTip[1] > landmarks[17][1] + 10;
+      let indexCurled = landmarks[8][1] > landmarks[5][1] + THRESHOLD_CURLED;
+      let middleCurled = landmarks[12][1] > landmarks[9][1] + THRESHOLD_CURLED;
+      let ringCurled = landmarks[16][1] > landmarks[13][1] + THRESHOLD_CURLED;
+      let pinkyCurled = landmarks[20][1] > landmarks[17][1] + THRESHOLD_CURLED;
 
       let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
 
-      // 檢查拇指尖是否靠近手掌或其他手指
-      // 拇指尖 (4) 和手掌中心區域 (例如中指第二關節 9) 的距離
-      let thumbCloseToPalm = dist(thumbTip[0], thumbTip[1], landmarks[9][0], landmarks[9][1]) < 80; // 稍微調整閾值
+      // 檢查拇指是否收攏
+      // 拇指尖 (4) 通常會靠近食指根部 (5) 或中指根部 (9)
+      // 使用拇指尖到中指根部的距離，確保它不是伸直的
+      let thumbToMiddleBaseDist = dist(landmarks[4][0], landmarks[4][1], landmarks[9][0], landmarks[9][1]);
+      const THUMB_CLOSE_THRESHOLD = 80; // 拇指尖到中指根部距離小於此值，表示收攏
 
-      return allFingersCurled && thumbCloseToPalm;
+      return allFingersCurled && (thumbToMiddleBaseDist < THUMB_CLOSE_THRESHOLD);
     }
   }
   return false;
@@ -349,32 +362,30 @@ function isOpenHand() {
   if (hands.length > 0) {
     let landmarks = hands[0].landmarks;
     if (landmarks.length >= 21) {
-      // 檢查所有手指的尖端是否都明顯高於其根部關節 (即手指伸直)
-      // 使用 wrist (0) 或掌指關節 (5, 9, 13, 17) 作為參考
-      let wrist = landmarks[0];
-      let indexTip = landmarks[8];
-      let middleTip = landmarks[12];
-      let ringTip = landmarks[16];
-      let pinkyTip = landmarks[20];
-      let thumbTip = landmarks[4];
+      // 檢查所有手指的尖端是否都明顯高於其各自的掌指關節 (MCP) Y座標
+      // Y 座標越「小」表示越高
+      const THRESHOLD_STRAIGHT = 30; // 尖端 Y 座標比 MCP Y 座標小於此值，表示伸直
 
-      // 判斷手指是否向上伸直（Y座標更小）
-      let indexStraight = indexTip[1] < landmarks[5][1] - 30; // 食指尖明顯高於根部
-      let middleStraight = middleTip[1] < landmarks[9][1] - 30;
-      let ringStraight = ringTip[1] < landmarks[13][1] - 30;
-      let pinkyStraight = pinkyTip[1] < landmarks[17][1] - 30;
-      let thumbStraight = thumbTip[1] < landmarks[1][1] - 30; // 拇指尖高於第一個關節
+      let indexStraight = landmarks[8][1] < landmarks[5][1] - THRESHOLD_STRAIGHT;
+      let middleStraight = landmarks[12][1] < landmarks[9][1] - THRESHOLD_STRAIGHT;
+      let ringStraight = landmarks[16][1] < landmarks[13][1] - THRESHOLD_STRAIGHT;
+      let pinkyStraight = landmarks[20][1] < landmarks[17][1] - THRESHOLD_STRAIGHT;
+      
+      // 拇指判斷：拇指尖要比其第一關節高，且不應過於靠近其他手指
+      let thumbStraight = landmarks[4][1] < landmarks[1][1] - THRESHOLD_STRAIGHT;
+
 
       // 檢查手指是否張開（X座標間距）
       // 判斷食指和中指、中指和無名指、無名指和小指之間是否有足夠的橫向距離
-      let fingersSpread = dist(indexTip[0], indexTip[0], middleTip[0], middleTip[1]) > 50 && // 確保不是比讚
-                          dist(landmarks[8][0], landmarks[8][1], landmarks[12][0], landmarks[12][1]) > 30 &&
-                          dist(landmarks[12][0], landmarks[12][1], landmarks[16][0], landmarks[16][1]) > 30 &&
-                          dist(landmarks[16][0], landmarks[16][1], landmarks[20][0], landmarks[20][1]) > 30;
+      // 確保各手指尖之間有一定距離，避免手掌側向面對時誤判
+      const MIN_SPREAD_X = 25; // 相鄰手指尖 X 座標間距最小要求
 
-
+      let fingersSpreadX = (abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X) &&
+                           (abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X) &&
+                           (abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X);
+      
       // 綜合判斷：所有手指都伸直，且手指之間有一定間距
-      return indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraight && fingersSpread;
+      return indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraight && fingersSpreadX;
     }
   }
   return false;
