@@ -181,8 +181,9 @@ function draw() {
       //   if(landmarks){
       //       console.log("食指尖 Y:", landmarks[8][1], "食指MCP Y:", landmarks[5][1]);
       //       console.log("中指尖 Y:", landmarks[12][1], "中指MCP Y:", landmarks[9][1]);
-      //       console.log("拇指尖 Y:", landmarks[4][1], "拇指MCP Y:", landmarks[1][1]);
+      //       console.log("拇指尖 Y:", landmarks[4][1], "拇指根 Y:", landmarks[1][1]);
       //       console.log("食指X:", landmarks[8][0], "中指X:", landmarks[12][0], "無名指X:", landmarks[16][0], "小指X:", landmarks[20][0]);
+      //       console.log("食指到小指跨度:", abs(landmarks[8][0] - landmarks[20][0]));
       //   }
       // } else {
       //   console.log("未偵測到手部。");
@@ -283,6 +284,7 @@ function checkAction() {
   const hasOpenHand = isOpenHand();
 
   // 如果同時偵測到兩種手勢，這可能是模糊情況，或兩者都不是明確的動作，可以考慮不做判斷或視為無效
+  // 減少同時判斷為真導致的誤判
   if (hasFist && hasOpenHand) {
       feedback = "手勢模糊，請明確動作！";
       // 這裡不給分也不扣分，等待更明確的動作
@@ -330,65 +332,61 @@ function checkAction() {
 
 // 判斷是否為握拳動作
 function isFistClosed() {
-  if (hands.length > 0) {
-    let landmarks = hands[0].landmarks;
-    if (landmarks.length >= 21) {
-      // 檢查所有手指尖端是否都明顯低於其各自的掌指關節 (MCP) Y座標
-      // 這個閾值可能需要微調，因為 Y 座標越「大」表示越下方
-      const THRESHOLD_CURLED = 20; // 尖端 Y 座標比 MCP Y 座標大於此值，表示彎曲
+  if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
-      let indexCurled = landmarks[8][1] > landmarks[5][1] + THRESHOLD_CURLED;
-      let middleCurled = landmarks[12][1] > landmarks[9][1] + THRESHOLD_CURLED;
-      let ringCurled = landmarks[16][1] > landmarks[13][1] + THRESHOLD_CURLED;
-      let pinkyCurled = landmarks[20][1] > landmarks[17][1] + THRESHOLD_CURLED;
+  let landmarks = hands[0].landmarks;
+  const THRESHOLD_CURLED_Y = 20; // 尖端 Y 座標比 MCP Y 座標大於此值，表示彎曲
+  const THUMB_CLOSE_THRESHOLD = 70; // 拇指尖到中指根部距離小於此值，表示收攏 (稍微收緊)
 
-      let allFingersCurled = indexCurled && middleCurled && ringCurled && pinkyCurled;
+  // 1. 檢查四個手指是否彎曲 (尖端 Y 座標顯著低於 MCP 關節 Y 座標，因為 Y 軸向下遞增)
+  let indexCurled = landmarks[8][1] > landmarks[5][1] + THRESHOLD_CURLED_Y;
+  let middleCurled = landmarks[12][1] > landmarks[9][1] + THRESHOLD_CURLED_Y;
+  let ringCurled = landmarks[16][1] > landmarks[13][1] + THRESHOLD_CURLED_Y;
+  let pinkyCurled = landmarks[20][1] > landmarks[17][1] + THRESHOLD_CURLED_Y;
 
-      // 檢查拇指是否收攏
-      // 拇指尖 (4) 通常會靠近食指根部 (5) 或中指根部 (9)
-      // 使用拇指尖到中指根部的距離，確保它不是伸直的
-      let thumbToMiddleBaseDist = dist(landmarks[4][0], landmarks[4][1], landmarks[9][0], landmarks[9][1]);
-      const THUMB_CLOSE_THRESHOLD = 80; // 拇指尖到中指根部距離小於此值，表示收攏
+  // 2. 檢查拇指是否收攏
+  // 判斷拇指尖 (4) 和食指根部 (5) 或中指根部 (9) 的距離
+  // 如果拇指尖和掌根(0)的距離也小，可能是收得很緊的拳頭
+  let thumbCloseCheck = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_THRESHOLD &&
+                        dist(landmarks[4][0], landmarks[4][1], landmarks[9][0], landmarks[9][1]) < THUMB_CLOSE_THRESHOLD;
+  
+  // 如果拇指在掌根(0)的Y值之下，表示拇指是向下或彎曲的
+  let thumbYCheck = landmarks[4][1] > landmarks[1][1] + 10; // 拇指尖Y比拇指根Y大
 
-      return allFingersCurled && (thumbToMiddleBaseDist < THUMB_CLOSE_THRESHOLD);
-    }
-  }
-  return false;
+  return indexCurled && middleCurled && ringCurled && pinkyCurled && thumbCloseCheck && thumbYCheck;
 }
 
 
-// 判斷是否為攤開手掌的動作 (原先的 isOneFingerUp 改為 isOpenHand)
+// 判斷是否為攤開手掌的動作 (張開五隻手指)
 function isOpenHand() {
-  if (hands.length > 0) {
-    let landmarks = hands[0].landmarks;
-    if (landmarks.length >= 21) {
-      // 檢查所有手指的尖端是否都明顯高於其各自的掌指關節 (MCP) Y座標
-      // Y 座標越「小」表示越高
-      const THRESHOLD_STRAIGHT = 30; // 尖端 Y 座標比 MCP Y 座標小於此值，表示伸直
+  if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
-      let indexStraight = landmarks[8][1] < landmarks[5][1] - THRESHOLD_STRAIGHT;
-      let middleStraight = landmarks[12][1] < landmarks[9][1] - THRESHOLD_STRAIGHT;
-      let ringStraight = landmarks[16][1] < landmarks[13][1] - THRESHOLD_STRAIGHT;
-      let pinkyStraight = landmarks[20][1] < landmarks[17][1] - THRESHOLD_STRAIGHT;
-      
-      // 拇指判斷：拇指尖要比其第一關節高，且不應過於靠近其他手指
-      let thumbStraight = landmarks[4][1] < landmarks[1][1] - THRESHOLD_STRAIGHT;
+  let landmarks = hands[0].landmarks;
+  const THRESHOLD_STRAIGHT_Y = 30; // 尖端 Y 座標比 MCP Y 座標小於此值，表示伸直
+  const MIN_SPREAD_X = 40;        // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開)
+  const MIN_FULL_SPREAD_X = 150;  // 食指尖到小指尖的總橫向距離 (判斷完全張開)
 
+  // 1. 檢查所有手指（食指、中指、無名指、小指、拇指）是否伸直
+  // 尖端 Y 座標必須明顯高於 MCP 關節 Y 座標 (Y 軸向下遞增，所以高表示 Y 值小)
+  let indexStraight = landmarks[8][1] < landmarks[5][1] - THRESHOLD_STRAIGHT_Y;
+  let middleStraight = landmarks[12][1] < landmarks[9][1] - THRESHOLD_STRAIGHT_Y;
+  let ringStraight = landmarks[16][1] < landmarks[13][1] - THRESHOLD_STRAIGHT_Y;
+  let pinkyStraight = landmarks[20][1] < landmarks[17][1] - THRESHOLD_STRAIGHT_Y;
+  let thumbStraight = landmarks[4][1] < landmarks[1][1] - THRESHOLD_STRAIGHT_Y; // 拇指尖高於其根部
 
-      // 檢查手指是否張開（X座標間距）
-      // 判斷食指和中指、中指和無名指、無名指和小指之間是否有足夠的橫向距離
-      // 確保各手指尖之間有一定距離，避免手掌側向面對時誤判
-      const MIN_SPREAD_X = 25; // 相鄰手指尖 X 座標間距最小要求
+  let allFingersStraight = indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraight;
 
-      let fingersSpreadX = (abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X) &&
-                           (abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X) &&
-                           (abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X);
-      
-      // 綜合判斷：所有手指都伸直，且手指之間有一定間距
-      return indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraight && fingersSpreadX;
-    }
-  }
-  return false;
+  // 2. 檢查手指是否張開（橫向距離）
+  // 相鄰手指尖的 X 座標差異必須足夠大
+  let fingersSpread = (abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X) && // 食指 vs 中指
+                      (abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X) && // 中指 vs 無名指
+                      (abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X); // 無名指 vs 小指
+
+  // 3. 檢查食指到小指的總橫向距離是否達到完全張開的程度
+  let fullSpreadX = abs(landmarks[8][0] - landmarks[20][0]) > MIN_FULL_SPREAD_X;
+
+  // 綜合判斷：所有手指伸直 AND 手指之間有足夠的橫向張開距離
+  return allFingersStraight && fingersSpread && fullSpreadX;
 }
 
 // 繪製手部關節點和連線 (淺綠色)
