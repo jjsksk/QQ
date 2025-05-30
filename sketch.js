@@ -42,8 +42,8 @@ let handDetectInterval = 50; // 更頻繁地偵測手勢 (約 20 FPS)
 // 新增：白線框的變數
 let detectionBoxX;
 let detectionBoxY;
-let detectionBoxWidth = 300; // 偵測框的寬度
-let detectionBoxHeight = 300; // 偵測框的高度
+let detectionBoxWidth = 350; // 偵測框的寬度稍微增加
+let detectionBoxHeight = 350; // 偵測框的高度稍微增加
 
 function setup() {
   createCanvas(640, 480);
@@ -156,12 +156,14 @@ function draw() {
     return;
   }
 
-  // 繪製白色偵測線框
+  // 繪製白色偵測線框 - 讓它更明顯
   noFill();
   stroke(255); // 白色
-  strokeWeight(3);
+  strokeWeight(5); // 增加線條粗細
+  drawingContext.setLineDash([10, 10]); // 設置虛線，讓邊框更突出
   rectMode(CENTER);
   rect(detectionBoxX, detectionBoxY, detectionBoxWidth, detectionBoxHeight);
+  drawingContext.setLineDash([]); // 重置為實線，避免影響其他繪圖
 
   // 檢查手是否在框內
   let handInBox = false;
