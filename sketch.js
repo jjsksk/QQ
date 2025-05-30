@@ -24,7 +24,7 @@ let nameList = [
   "嚴浩翔",
   "賀峻霖", // 非老師們
 ];
-// 淡江教科的老師們 (請確認此列表包含所有老師的名字)
+// 淡江教科的老師們
 let teacherList = [
   "顧大維",
   "何俐安",
@@ -40,7 +40,7 @@ let switchInterval = 5000; // 每 5 秒切換一次人名 (5000 毫秒)
 let feedback = ""; // 顯示給玩家的回饋訊息
 let score = 0; // 遊戲分數
 
-let boxSize = 200;
+let boxSize = 250; // 加大方塊尺寸以容納更清晰的字體
 let boxPulse = 0; // 人名方塊的脈動效果
 
 // 動作判斷狀態變數 (防止重複加減分)
@@ -55,15 +55,15 @@ let correctionMarkAlpha = 255; // 打勾或打叉的透明度
 let correctionMarkDuration = 1000; // 打勾或打叉顯示時間 (毫秒)
 let correctionMarkStartTime; // 打勾或打叉開始顯示的時間
 
-// 偵測頻率控制變數
+// 偵測頻率控制變數 (現在由 ml5 handpose.on 事件處理，這裡保留作為參考)
 let lastHandDetectTime = 0;
-let handDetectInterval = 100; // 降低偵測頻率以減少 CPU 負擔，但仍保持足夠響應 (約 10 FPS)
+let handDetectInterval = 100;
 
-// 新增：白線框的變數
+// 白線框的變數
 let detectionBoxX;
 let detectionBoxY;
-let detectionBoxWidth = 400; // 偵測框的寬度稍微增加
-let detectionBoxHeight = 400; // 偵測框的高度稍微增加
+let detectionBoxWidth = 450; // 偵測框寬度進一步增加
+let detectionBoxHeight = 450; // 偵測框高度進一步增加
 
 function setup() {
   createCanvas(640, 480);
@@ -72,7 +72,8 @@ function setup() {
   video.hide();
 
   textAlign(CENTER, CENTER);
-  textSize(28);
+  // 調整字體大小，讓人名更清晰
+  textSize(40);
 
   // 設定偵測框的中心位置
   detectionBoxX = width / 2;
@@ -117,20 +118,20 @@ function showStartScreen() {
 function videoReady() {
   console.log("攝影機成功啟動！");
 
-  // 初始化 handpose 模型，並設置在模型載入完成後觸發 checkModelsLoaded
+  // 初始化 handpose 模型
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
     checkModelsLoaded();
   });
 
   // 設定模型載入成功後，開始持續偵測手部
+  // 這是持續更新 `hands` 陣列的關鍵，避免手部沒偵測到
   handpose.on("hand", (results) => {
     hands = results;
   });
 }
 
 function checkModelsLoaded() {
-  // 檢查 handpose 模型是否真的載入完成
   if (handpose && handpose.ready) {
     gameModelsLoaded = true;
     showStartScreen();
@@ -150,7 +151,6 @@ function startGame() {
   timeLeft = 60; // 遊戲開始時時間重置
   pickNewName(); // 第一次選取名字並啟動動作偵測窗口
 
-  // 遊戲進行 60 秒
   if (gameInterval) clearInterval(gameInterval);
   gameInterval = setInterval(() => {
     timeLeft--;
@@ -184,16 +184,15 @@ function draw() {
   noFill();
   stroke(255); // 白色
   strokeWeight(5); // 增加線條粗細
-  drawingContext.setLineDash([10, 10]); // 設置虛線，讓邊框更突出
+  drawingContext.setLineDash([10, 10]); // 設置虛線
   rectMode(CENTER);
   rect(detectionBoxX, detectionBoxY, detectionBoxWidth, detectionBoxHeight);
-  drawingContext.setLineDash([]); // 重置為實線，避免影響其他繪圖
+  drawingContext.setLineDash([]); // 重置為實線
 
   // 檢查手是否在框內
   let handInBox = false;
   if (hands.length > 0) {
     let wrist = hands[0].landmarks[0]; // 手腕關鍵點
-    // handpose偵測到的landmarks座標是基於翻轉後的畫面的，所以直接使用即可
     if (
       wrist[0] > detectionBoxX - detectionBoxWidth / 2 &&
       wrist[0] < detectionBoxX + detectionBoxWidth / 2 &&
@@ -214,7 +213,7 @@ function draw() {
   rect(width / 2, boxY, currentBoxSize, currentBoxSize / 2);
 
   fill(0);
-  textSize(28);
+  // 使用先前設定的textSize(40)
   text(currentName, width / 2, boxY);
 
   fill(0, 200, 0);
@@ -233,7 +232,7 @@ function draw() {
 
   // 優化偵測提示邏輯
   if (gameStarted && hands.length === 0) {
-    feedback = "🔍 請將手背完整地放入攝影機畫面中央！";
+    feedback = "🔍 請將手心完整地放入攝影機畫面中央！";
   } else if (gameStarted && hands.length > 0 && !handInBox) {
     feedback = "⚠️ 請將手移入白色框內！";
   } else if (gameStarted && hands.length > 0 && handInBox) {
@@ -241,8 +240,9 @@ function draw() {
     if (actionWindowActive && !actionCheckedForCurrentName) {
       checkAction();
     }
-    if (feedback.includes("偵測中") || feedback.includes("請將手")) {
-      feedback = ""; // 清除提示，因為現在手已經被偵測到且在框內
+    // 如果之前有提示，現在手已偵測到且在框內，就清除提示
+    if (feedback.includes("請將手")) {
+      feedback = "";
     }
   }
 
@@ -255,8 +255,8 @@ function draw() {
     if (elapsed < correctionMarkDuration) {
       correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
       push();
-      // correctionMarkPosition的座標是基於原本的影像，如果影像翻轉了，則mark也要翻轉
-      translate(width - correctionMarkPosition.x, correctionMarkPosition.y); // 因為顯示畫面左右翻轉，所以這裡也需要翻轉
+      // 因為顯示畫面左右翻轉，所以這裡也需要翻轉
+      translate(width - correctionMarkPosition.x, correctionMarkPosition.y);
       noFill();
       strokeWeight(5);
       stroke(0, 0, 255, correctionMarkAlpha);
@@ -276,7 +276,6 @@ function draw() {
 
   // 時間到自動換名字，不再因為未回應而扣分
   if (millis() - lastSwitchTime > switchInterval) {
-    // 這裡不進行未回應的扣分
     pickNewName();
   }
 }
@@ -304,7 +303,7 @@ function endGame() {
   let startButton = select("#startButton");
   if (startButton) {
     startButton.style("display", "block");
-    startButton.html("重新開始遊戲");
+    startButton.html('重新開始遊戲');
     startButton.removeAttribute("disabled");
   }
 }
@@ -319,7 +318,6 @@ function pickNewName() {
 
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
-  // 只有在動作窗口開啟且該名字的動作尚未被檢查過時才執行
   if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0)
     return false;
 
@@ -336,44 +334,39 @@ function checkAction() {
     }
   }
 
-  // 如果手不在框內，則不進行手勢判斷
   if (!handInBox) {
     feedback = "⚠️ 請將手移入白色框內！";
-    return false; // 不做任何判斷，等待手進入框內
+    return false;
   }
 
-  let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或攤開)
+  let actionMade = false;
   let correctAction = false;
 
   const isCurrentTeacher = teacherList.includes(currentName);
 
-  // 偵測兩種手勢
   const hasFist = isFistClosed();
   const hasOpenHand = isOpenHand();
 
-  // 減少同時判斷為真導致的誤判，優先判斷是否明確做出其中一種手勢
   // 如果兩種手勢同時被偵測到 (這不太可能在真實情況下發生，除非閾值非常寬鬆)，則認為不明確
   if (hasFist && hasOpenHand) {
     feedback = "手勢模糊，請明確動作！";
-    return false; // 不給分也不扣分，等待更明確的動作
+    return false;
   }
 
   if (isCurrentTeacher) {
     // 如果是教科老師，期望握拳
     if (hasFist) {
-      // 正確動作：握拳
       actionMade = true;
       correctAction = true;
-      score += currentName === "陳慶帆" ? 2 : 1; // 陳慶帆老師答對加2分，其他老師加1分
+      score += currentName === "陳慶帆" ? 2 : 1;
       feedback =
         currentName === "陳慶帆"
           ? "👊 陳慶帆老師來了！握拳加倍加分！"
           : "👊 老師來了！握拳加分！";
     } else if (hasOpenHand) {
-      // 錯誤動作：攤開
       actionMade = true;
       correctAction = false;
-      score -= currentName === "陳慶帆" ? 3 : 1; // 陳慶帆老師答錯扣3分，其他老師扣1分
+      score -= currentName === "陳慶帆" ? 3 : 1;
       feedback =
         currentName === "陳慶帆"
           ? "😐 對陳慶帆老師要握拳才能加分喔！扣3分！"
@@ -382,13 +375,11 @@ function checkAction() {
   } else {
     // 如果不是教科老師，期望攤開手
     if (hasOpenHand) {
-      // 正確動作：攤開
       actionMade = true;
       correctAction = true;
       feedback = "🖐️ 這不是老師，給他攤開手！加1分！";
       score += 1;
     } else if (hasFist) {
-      // 錯誤動作：握拳
       actionMade = true;
       correctAction = false;
       feedback = "👊 這時候要攤開手啦～扣1分！";
@@ -396,11 +387,9 @@ function checkAction() {
     }
   }
 
-  // 如果成功偵測到任何有效動作，就給予回饋並標記已檢查
   if (actionMade) {
-    actionCheckedForCurrentName = true; // 標記為已檢查，防止重複加減分
-    let wrist = hands[0].landmarks[0]; // 使用手腕作為回饋位置參考
-    // 注意：因為畫面顯示是左右翻轉的，所以回饋標記的 X 座標也需要翻轉
+    actionCheckedForCurrentName = true;
+    let wrist = hands[0].landmarks[0];
     correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
     correctionMarkType = correctAction ? "check" : "cross";
     showCorrectionMark = true;
@@ -409,77 +398,102 @@ function checkAction() {
   return actionMade;
 }
 
-// 判斷是否為握拳動作 (手背朝攝影機)
+// 判斷是否為握拳動作 (手心朝攝影機)
 function isFistClosed() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 手背朝攝影機時，彎曲手指會讓指尖的 Y 座標相對**上升** (因為 Y 軸向下遞增)
-  // 且指尖會更靠近手腕
-  // 閾值已經設定得非常寬鬆，以便更容易偵測
-  // 調整閾值，使其更靈敏地偵測握拳
-  const THRESHOLD_CURLED_Y_OFFSET = -10; // 指尖 Y 座標比 MCP Y 座標小於此負值，表示彎曲向上
-  const THUMB_CLOSE_DISTANCE = 50; // 拇指尖與食指根部或掌心距離，表示收攏
 
-  // 檢查四個手指是否彎曲 (尖端 Y 座標相對 MCP 關節的 Y 座標更高，即 Y 值更小)
-  // 檢查指尖是否在對應指關節的上方 (Y值較小，因為Y軸向下)
-  let indexCurled = landmarks[8][1] < landmarks[5][1] + THRESHOLD_CURLED_Y_OFFSET;
-  let middleCurled = landmarks[12][1] < landmarks[9][1] + THRESHOLD_CURLED_Y_OFFSET;
-  let ringCurled = landmarks[16][1] < landmarks[13][1] + THRESHOLD_CURLED_Y_OFFSET;
-  let pinkyCurled = landmarks[20][1] < landmarks[17][1] + THRESHOLD_CURLED_Y_OFFSET;
+  // 手心朝攝影機時，握拳會讓指尖的 Y 座標相對**上升** (因為 Y 軸向下遞增)
+  // 且指尖會**靠近**掌心 (即手腕)
+  // 拇指會**靠近**食指或掌心
 
-  // 檢查拇指是否收攏或彎曲
-  // 拇指尖 (4) 應該靠近食指根部 (5) 或掌心 (0) 的某個點
-  let thumbCloseToPalm = dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_DISTANCE;
-  let thumbCloseToIndex = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_DISTANCE;
+  // 設定非常寬鬆的閾值，以提高偵測率
+  const FINGER_CURLED_Y_THRESHOLD = 20; // 指尖 Y 座標比其關節 Y 座標**小於**此值 (向上捲曲)
+  const FINGER_CURLED_X_THRESHOLD = 20; // 指尖 X 座標與其關節 X 座標的絕對差值 (向內收縮)
+  const THUMB_CLOSE_DISTANCE = 40; // 拇指尖到食指根部或掌心的距離
 
-  return indexCurled && middleCurled && ringCurled && pinkyCurled && (thumbCloseToPalm || thumbCloseToIndex);
+  let allFingersCurled = true;
+
+  // 檢查食指、中指、無名指、小指是否彎曲且向內收縮
+  // 食指 (8) 相對食指根部 (5)
+  if (!(landmarks[8][1] > landmarks[5][1] - FINGER_CURLED_Y_THRESHOLD &&
+        abs(landmarks[8][0] - landmarks[5][0]) < FINGER_CURLED_X_THRESHOLD)) {
+    allFingersCurled = false;
+  }
+  // 中指 (12) 相對中指根部 (9)
+  if (!(landmarks[12][1] > landmarks[9][1] - FINGER_CURLED_Y_THRESHOLD &&
+        abs(landmarks[12][0] - landmarks[9][0]) < FINGER_CURLED_X_THRESHOLD)) {
+    allFingersCurled = false;
+  }
+  // 無名指 (16) 相對無名指根部 (13)
+  if (!(landmarks[16][1] > landmarks[13][1] - FINGER_CURLED_Y_THRESHOLD &&
+        abs(landmarks[16][0] - landmarks[13][0]) < FINGER_CURLED_X_THRESHOLD)) {
+    allFingersCurled = false;
+  }
+  // 小指 (20) 相對小指根部 (17)
+  if (!(landmarks[20][1] > landmarks[17][1] - FINGER_CURLED_Y_THRESHOLD &&
+        abs(landmarks[20][0] - landmarks[17][0]) < FINGER_CURLED_X_THRESHOLD)) {
+    allFingersCurled = false;
+  }
+
+  // 檢查拇指是否收攏
+  // 拇指尖 (4) 靠近食指根部 (5) 或掌心 (0)
+  let thumbClose = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_DISTANCE ||
+                   dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_DISTANCE;
+
+  return allFingersCurled && thumbClose;
 }
 
-// 判斷是否為攤開手掌的動作 (張開五隻手指) (手背朝攝影機)
+
+// 判斷是否為攤開手掌的動作 (手心朝攝影機)
 function isOpenHand() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 手背朝攝影機時，伸直手指會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
-  // 閾值已經設定得非常寬鬆，以便更容易偵測
-  // 調整閾值，使其更靈敏地偵測攤開
-  const THRESHOLD_STRAIGHT_Y_OFFSET = 15; // 尖端 Y 座標比 MCP Y 座標大於此值，表示伸直 (稍微放寬)
-  const MIN_SPREAD_X = 20; // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，稍微放寬)
-  const THUMB_AWAY_DISTANCE = 60; // 拇指尖到掌根距離，表示拇指張開 (稍微放寬)
 
-  // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
-  // 尖端 Y 座標必須明顯低於 MCP 關節 Y 座標 (Y 軸向下遞增，所以低表示 Y 值大)
-  let indexStraight = landmarks[8][1] > landmarks[5][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
-  let middleStraight = landmarks[12][1] > landmarks[9][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
-  let ringStraight = landmarks[16][1] > landmarks[13][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
-  let pinkyStraight = landmarks[20][1] > landmarks[17][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
+  // 手心朝攝影機時，攤開手掌會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
+  // 且手指之間會**遠離**，X 座標會有明顯差異
+  // 拇指會**遠離**掌心
 
-  // 2. 檢查拇指是否伸直並遠離掌心
-  // 拇指尖 (4) 的 Y 座標應明顯低於其根部 (1)
-  // 且拇指尖 (4) 應與掌根 (0) 有足夠的距離
-  let thumbStraightAndSpread =
-    landmarks[4][1] > landmarks[1][1] + THRESHOLD_STRAIGHT_Y_OFFSET &&
-    dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) >
-      THUMB_AWAY_DISTANCE;
+  // 設定非常寬鬆的閾值，以提高偵測率
+  const FINGER_STRAIGHT_Y_OFFSET = 30; // 指尖 Y 座標比其關節 Y 座標**大於**此值 (向下伸直)
+  const FINGER_SPREAD_X_DISTANCE = 30; // 相鄰手指尖 X 座標間距
+  const THUMB_AWAY_DISTANCE = 70; // 拇指尖到掌根的距離
 
-  let allFingersStraight =
-    indexStraight &&
-    middleStraight &&
-    ringStraight &&
-    pinkyStraight &&
-    thumbStraightAndSpread;
+  let allFingersStraight = true;
 
-  // 3. 檢查手指是否張開（橫向距離）
-  // 確保手指尖的 X 座標有足夠的差異
+  // 檢查食指、中指、無名指、小指是否伸直
+  // 食指 (8) 相對食指根部 (5)
+  if (!(landmarks[8][1] > landmarks[5][1] + FINGER_STRAIGHT_Y_OFFSET)) {
+    allFingersStraight = false;
+  }
+  // 中指 (12) 相對中指根部 (9)
+  if (!(landmarks[12][1] > landmarks[9][1] + FINGER_STRAIGHT_Y_OFFSET)) {
+    allFingersStraight = false;
+  }
+  // 無名指 (16) 相對無名指根部 (13)
+  if (!(landmarks[16][1] > landmarks[13][1] + FINGER_STRAIGHT_Y_OFFSET)) {
+    allFingersStraight = false;
+  }
+  // 小指 (20) 相對小指根部 (17)
+  if (!(landmarks[20][1] > landmarks[17][1] + FINGER_STRAIGHT_Y_OFFSET)) {
+    allFingersStraight = false;
+  }
+
+  // 檢查手指是否張開（橫向距離）
   let fingersSpread =
-    abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X && // 食指 vs 中指
-    abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X && // 中指 vs 無名指
-    abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X; // 無名指 vs 小指
+    abs(landmarks[8][0] - landmarks[12][0]) > FINGER_SPREAD_X_DISTANCE && // 食指 vs 中指
+    abs(landmarks[12][0] - landmarks[16][0]) > FINGER_SPREAD_X_DISTANCE && // 中指 vs 無名指
+    abs(landmarks[16][0] - landmarks[20][0]) > FINGER_SPREAD_X_DISTANCE; // 無名指 vs 小指
 
-  // 綜合判斷：所有手指伸直 AND 手指之間有足夠的橫向張開距離
-  return allFingersStraight && fingersSpread;
+  // 檢查拇指是否張開並遠離掌心
+  let thumbAway = dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) > THUMB_AWAY_DISTANCE;
+
+  // 綜合判斷
+  return allFingersStraight && fingersSpread && thumbAway;
 }
+
 
 // 繪製手部關節點和連線 (淺綠色)
 function drawHandLandmarks() {
