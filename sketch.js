@@ -167,6 +167,14 @@ function draw() {
   fill(255, 0, 0);
   textAlign(CENTER, BOTTOM);
   textSize(22);
+  
+  // 優化偵測提示邏輯
+  if (gameStarted && hands.length === 0) {
+      feedback = "🔍 請將手背完整地放入攝影機畫面中央！";
+  } else if (gameStarted && feedback.includes("偵測中...請對準攝影機！")) {
+      // 如果之前顯示過「偵測中」且現在偵測到手了，就清除訊息，除非有其他訊息
+      feedback = ""; 
+  }
   text(feedback, width / 2, height - 10);
 
   // 限制手勢偵測頻率
@@ -180,9 +188,6 @@ function draw() {
       }
     });
     lastHandDetectTime = millis();
-  } else if (hands.length === 0 && gameStarted) { // 只有在遊戲開始後才提示
-    // 如果沒有偵測到手，提示用戶對準攝影機
-    feedback = "偵測中...請對準攝影機！";
   }
 
 
@@ -249,7 +254,7 @@ function endGame() {
 function pickNewName() {
   currentName = random(nameList);
   lastSwitchTime = millis();
-  feedback = "";
+  feedback = ""; // 清空上次的回饋
   actionCheckedForCurrentName = false;
   actionWindowActive = true; // 新名字出現，動作窗口開啟
 }
@@ -321,8 +326,9 @@ function isFistClosed() {
   let landmarks = hands[0].landmarks;
   // 手背朝攝影機時，彎曲手指會讓指尖的 Y 座標相對**上升** (因為 Y 軸向下遞增)
   // 且指尖會更靠近手腕
-  const THRESHOLD_CURLED_Y_OFFSET = -15; // 尖端 Y 座標比 MCP Y 座標**小於**此負值，表示彎曲向上
-  const THUMB_CLOSE_DISTANCE = 50; // 拇指尖與食指根部距離，放寬以表示收攏
+  // 閾值已經設定得非常寬鬆，以便更容易偵測
+  const THRESHOLD_CURLED_Y_OFFSET = -5; // 尖端 Y 座標比 MCP Y 座標**小於**此負值，表示彎曲向上 (極為寬鬆)
+  const THUMB_CLOSE_DISTANCE = 60; // 拇指尖與食指根部距離，放寬以表示收攏
 
   // 檢查四個手指是否彎曲 (尖端 Y 座標相對 MCP 關節的 Y 座標更高，即 Y 值更小)
   let indexCurled = landmarks[8][1] < landmarks[5][1] + THRESHOLD_CURLED_Y_OFFSET;
@@ -345,16 +351,17 @@ function isOpenHand() {
 
   let landmarks = hands[0].landmarks;
   // 手背朝攝影機時，伸直手指會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
-  const THRESHOLD_STRAIGHT_Y_OFFSET = 10; // 尖端 Y 座標比 MCP Y 座標**大於**此值，表示伸直
-  const MIN_SPREAD_X = 20;         // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開)
-  const MIN_FULL_SPREAD_X = 80;   // 食指尖到小指尖的總橫向距離 (判斷完全張開)
-  const THUMB_AWAY_DISTANCE = 70; // 拇指尖到掌根距離，表示拇指張開
+  // 閾值已經設定得非常寬鬆，以便更容易偵測
+  const THRESHOLD_STRAIGHT_Y_OFFSET = 5; // 尖端 Y 座標比 MCP Y 座標**大於**此值，表示伸直 (極為寬鬆)
+  const MIN_SPREAD_X = 10;         // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，極度放寬)
+  const MIN_FULL_SPREAD_X = 40;   // 食指尖到小指尖的總橫向距離 (判斷完全張開，極度放寬)
+  const THUMB_AWAY_DISTANCE = 40; // 拇指尖到掌根距離，表示拇指張開 (極為寬鬆)
 
   // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
   // 尖端 Y 座標必須明顯低於 MCP 關節 Y 座標 (Y 軸向下遞增，所以低表示 Y 值大)
   let indexStraight = landmarks[8][1] > landmarks[5][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
   let middleStraight = landmarks[12][1] > landmarks[9][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
-  let ringStraight = landmarks[16][1] > landmarks[13][1] + THRESHED_STRAIGHT_Y_OFFSET;
+  let ringStraight = landmarks[16][1] > landmarks[13][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
   let pinkyStraight = landmarks[20][1] > landmarks[17][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
 
   // 2. 檢查拇指是否伸直並遠離掌心
