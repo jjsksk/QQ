@@ -319,10 +319,10 @@ function isFistClosed() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 調整閾值，使其更靈敏地判斷彎曲和收攏
-  const THRESHOLD_CURLED_Y = 35; // 尖端 Y 座標比 MCP Y 座標大於此值，表示彎曲程度較大
-  const THUMB_CLOSE_THRESHOLD_X = 40; // 拇指尖到食指根部 X 距離，表示拇指橫向收攏
-  const THUMB_CLOSE_THRESHOLD_Y = 20; // 拇指尖到拇指根部 Y 距離，表示拇指向下彎曲
+  // 大幅放寬閾值，讓握拳更容易被識別
+  const THRESHOLD_CURLED_Y = 15; // 尖端 Y 座標比 MCP Y 座標只要大一點點，就表示彎曲
+  const THUMB_CLOSE_THRESHOLD_X = 80; // 拇指尖到食指根部 X 距離，放寬以表示拇指只要稍微靠攏
+  const THUMB_CLOSE_THRESHOLD_Y = 0; // 拇指尖只要在拇指根部 Y 座標下方，就可能被視為彎曲
 
   // 1. 檢查四個手指是否彎曲 (尖端 Y 座標顯著低於 MCP 關節 Y 座標，因為 Y 軸向下遞增)
   let indexCurled = landmarks[8][1] > landmarks[5][1] + THRESHOLD_CURLED_Y;
@@ -331,9 +331,8 @@ function isFistClosed() {
   let pinkyCurled = landmarks[20][1] > landmarks[17][1] + THRESHOLD_CURLED_Y;
 
   // 2. 檢查拇指是否收攏或彎曲
-  // 檢查拇指尖 (4) 的 X 座標是否靠近食指根部 (5) 的 X 座標，且 Y 座標是否比拇指根部 (1) 更低
   let thumbClosed = (abs(landmarks[4][0] - landmarks[5][0]) < THUMB_CLOSE_THRESHOLD_X) &&
-                    (landmarks[4][1] > landmarks[1][1] + THUMB_CLOSE_THRESHOLD_Y);
+                    (landmarks[4][1] > landmarks[1][1] + THUMB_CLOSE_THRESHOLD_Y); // 拇指尖Y比拇指根Y大
 
   return indexCurled && middleCurled && ringCurled && pinkyCurled && thumbClosed;
 }
@@ -344,11 +343,11 @@ function isOpenHand() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 調整閾值，使其更靈敏地判斷伸直和張開
-  const THRESHOLD_STRAIGHT_Y = 30; // 尖端 Y 座標比 MCP Y 座標小於此值，表示伸直
-  const MIN_SPREAD_X = 30;         // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開)
-  const MIN_FULL_SPREAD_X = 120;   // 食指尖到小指尖的總橫向距離 (判斷完全張開)
-  const THUMB_AWAY_FROM_PALM_X = 50; // 拇指尖到掌根 X 距離，表示拇指張開
+  // 大幅放寬閾值，讓攤開手更容易被識別
+  const THRESHOLD_STRAIGHT_Y = 10; // 尖端 Y 座標比 MCP Y 座標只要小一點點，就表示伸直
+  const MIN_SPREAD_X = 10;         // 相鄰手指尖 X 座標間距最小要求，極度放寬
+  const MIN_FULL_SPREAD_X = 50;   // 食指尖到小指尖的總橫向距離，極度放寬
+  const THUMB_AWAY_FROM_PALM_X = 10; // 拇指尖到掌根 X 距離，只要稍微張開
 
   // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
   // 尖端 Y 座標必須明顯高於 MCP 關節 Y 座標 (Y 軸向下遞增，所以高表示 Y 值小)
@@ -358,15 +357,12 @@ function isOpenHand() {
   let pinkyStraight = landmarks[20][1] < landmarks[17][1] - THRESHOLD_STRAIGHT_Y;
 
   // 2. 檢查拇指是否伸直並遠離掌心
-  // 拇指尖 (4) 的 Y 座標應明顯高於其根部 (1)
-  // 且拇指尖 (4) 的 X 座標應與掌根 (0) 有足夠的橫向距離
   let thumbStraightAndSpread = (landmarks[4][1] < landmarks[1][1] - THRESHOLD_STRAIGHT_Y) &&
                                (abs(landmarks[4][0] - landmarks[0][0]) > THUMB_AWAY_FROM_PALM_X);
 
   let allFingersStraight = indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraightAndSpread;
 
   // 3. 檢查手指是否張開（橫向距離）
-  // 相鄰手指尖的 X 座標差異必須足夠大
   let fingersSpread = (abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X) && // 食指 vs 中指
                       (abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X) && // 中指 vs 無名指
                       (abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X); // 無名指 vs 小指
