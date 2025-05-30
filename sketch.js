@@ -4,9 +4,9 @@ let hands = [];      // 儲存手部偵測結果
 // 遊戲狀態變數
 let gameStarted = false; // 遊戲是否開始
 let gameModelsLoaded = false; // 所有 AI 模型是否載入完成
-let startTime;            // 遊戲開始時間
-let timeLeft = 60;        // 剩餘時間 (秒)
-let gameInterval;         // 倒數計時器的 interval ID
+let startTime;               // 遊戲開始時間
+let timeLeft = 60;         // 剩餘時間 (秒)
+let gameInterval;          // 倒數計時器的 interval ID
 
 let nameList = [
   "顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴", // 老師們
@@ -33,12 +33,17 @@ let correctionMarkType = '';    // 'check' 或 'cross'
 let correctionMarkPosition;      // 打勾或打叉的位置 (p5.Vector)
 let correctionMarkAlpha = 255;  // 打勾或打叉的透明度
 let correctionMarkDuration = 1000; // 打勾或打叉顯示時間 (毫秒)
-let correctionMarkStartTime;     // 打勾或打叉開始顯示的時間
+let correctionMarkStartTime;       // 打勾或打叉開始顯示的時間
 
 // 偵測頻率控制變數
 let lastHandDetectTime = 0;
 let handDetectInterval = 50; // 更頻繁地偵測手勢 (約 20 FPS)
 
+// 新增：白線框的變數
+let detectionBoxX;
+let detectionBoxY;
+let detectionBoxWidth = 300; // 偵測框的寬度
+let detectionBoxHeight = 300; // 偵測框的高度
 
 function setup() {
   createCanvas(640, 480);
@@ -48,6 +53,10 @@ function setup() {
 
   textAlign(CENTER, CENTER);
   textSize(28);
+
+  // 設定偵測框的中心位置
+  detectionBoxX = width / 2;
+  detectionBoxY = height / 2;
 
   showStartScreen();
 
@@ -108,14 +117,14 @@ function startGame() {
     feedback = "請等待 AI 模型載入完成！";
     return;
   }
-  
+
   console.log("遊戲開始！");
   gameStarted = true;
   startTime = millis();
   score = 0; // 遊戲開始時分數歸零
   timeLeft = 60; // 遊戲開始時時間重置
   pickNewName(); // 第一次選取名字並啟動動作偵測窗口
-  
+
   // 遊戲進行 60 秒
   if (gameInterval) clearInterval(gameInterval);
   gameInterval = setInterval(() => {
@@ -134,11 +143,38 @@ function startGame() {
 
 function draw() {
   background(250);
-  image(video, 0, 0, width, height); // 顯示攝影機畫面
+  // 顯示攝影機畫面，並左右翻轉
+  push();
+  translate(width, 0);
+  scale(-1, 1);
+  image(video, 0, 0, width, height);
+  pop();
+
 
   if (!gameStarted) {
     showStartScreen();
     return;
+  }
+
+  // 繪製白色偵測線框
+  noFill();
+  stroke(255); // 白色
+  strokeWeight(3);
+  rectMode(CENTER);
+  rect(detectionBoxX, detectionBoxY, detectionBoxWidth, detectionBoxHeight);
+
+  // 檢查手是否在框內
+  let handInBox = false;
+  if (hands.length > 0) {
+    let wrist = hands[0].landmarks[0]; // 手腕關鍵點
+    // 由於攝影機畫面左右翻轉，手的座標也需要相對調整
+    // 然而，handpose偵測到的landmarks座標是基於翻轉後的畫面的，所以直接使用即可
+    if (wrist[0] > (detectionBoxX - detectionBoxWidth / 2) &&
+        wrist[0] < (detectionBoxX + detectionBoxWidth / 2) &&
+        wrist[1] > (detectionBoxY - detectionBoxHeight / 2) &&
+        wrist[1] < (detectionBoxY + detectionBoxHeight / 2)) {
+      handInBox = true;
+    }
   }
 
   boxPulse = sin(frameCount * 0.05) * 10;
@@ -167,13 +203,15 @@ function draw() {
   fill(255, 0, 0);
   textAlign(CENTER, BOTTOM);
   textSize(22);
-  
+
   // 優化偵測提示邏輯
   if (gameStarted && hands.length === 0) {
       feedback = "🔍 請將手背完整地放入攝影機畫面中央！";
+  } else if (gameStarted && hands.length > 0 && !handInBox) {
+      feedback = "⚠️ 請將手移入白色框內！";
   } else if (gameStarted && feedback.includes("偵測中...請對準攝影機！")) {
       // 如果之前顯示過「偵測中」且現在偵測到手了，就清除訊息，除非有其他訊息
-      feedback = ""; 
+      feedback = "";
   }
   text(feedback, width / 2, height - 10);
 
@@ -183,7 +221,8 @@ function draw() {
       hands = results;
 
       // 在手部數據更新後立即嘗試檢查動作
-      if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0) {
+      // 只有當手在框內時才檢查動作
+      if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0 && handInBox) {
         checkAction();
       }
     });
@@ -198,6 +237,8 @@ function draw() {
     if (elapsed < correctionMarkDuration) {
       correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
       push();
+      // correctionMarkPosition的座標是基於原本的影像，如果影像翻轉了，則mark也要翻轉
+      // 因為drawHandLandmarks已經處理了翻轉，所以這裡直接使用即可
       translate(correctionMarkPosition.x, correctionMarkPosition.y);
       noFill();
       strokeWeight(5);
@@ -233,7 +274,7 @@ function endGame() {
   text("最終分數: " + score, width / 2, height / 2 + 20);
   textSize(20);
   text("點擊重新開始", width / 2, height / 2 + 80);
-  
+
   // 重置遊戲相關變數以便重新開始
   score = 0;
   timeLeft = 60;
@@ -262,7 +303,25 @@ function pickNewName() {
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
   // 只有在動作窗口開啟且該名字的動作尚未被檢查過時才執行
-  if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0) return;
+  if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0) return false;
+
+  let handInBox = false;
+  if (hands.length > 0) {
+    let wrist = hands[0].landmarks[0];
+    if (wrist[0] > (detectionBoxX - detectionBoxWidth / 2) &&
+        wrist[0] < (detectionBoxX + detectionBoxWidth / 2) &&
+        wrist[1] > (detectionBoxY - detectionBoxHeight / 2) &&
+        wrist[1] < (detectionBoxY + detectionBoxHeight / 2)) {
+      handInBox = true;
+    }
+  }
+
+  // 如果手不在框內，則不進行手勢判斷
+  if (!handInBox) {
+      feedback = "⚠️ 請將手移入白色框內！";
+      return false; // 不做任何判斷，等待手進入框內
+  }
+
 
   let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或攤開)
   let correctAction = false;
@@ -277,7 +336,7 @@ function checkAction() {
   // 減少同時判斷為真導致的誤判，優先判斷是否明確做出其中一種手勢
   if (hasFist && hasOpenHand) {
       feedback = "手勢模糊，請明確動作！";
-      return; // 不給分也不扣分，等待更明確的動作
+      return false; // 不給分也不扣分，等待更明確的動作
   }
 
   if (isCurrentTeacher) {
@@ -317,6 +376,7 @@ function checkAction() {
     showCorrectionMark = true;
     correctionMarkStartTime = millis();
   }
+  return actionMade;
 }
 
 // 判斷是否為握拳動作 (手背朝攝影機)
@@ -353,8 +413,8 @@ function isOpenHand() {
   // 手背朝攝影機時，伸直手指會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
   // 閾值已經設定得非常寬鬆，以便更容易偵測
   const THRESHOLD_STRAIGHT_Y_OFFSET = 5; // 尖端 Y 座標比 MCP Y 座標**大於**此值，表示伸直 (極為寬鬆)
-  const MIN_SPREAD_X = 10;         // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，極度放寬)
-  const MIN_FULL_SPREAD_X = 40;   // 食指尖到小指尖的總橫向距離 (判斷完全張開，極度放寬)
+  const MIN_SPREAD_X = 10;           // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，極度放寬)
+  const MIN_FULL_SPREAD_X = 40;    // 食指尖到小指尖的總橫向距離 (判斷完全張開，極度放寬)
   const THUMB_AWAY_DISTANCE = 40; // 拇指尖到掌根距離，表示拇指張開 (極為寬鬆)
 
   // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
