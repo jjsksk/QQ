@@ -134,7 +134,7 @@ function startGame() {
 
 function draw() {
   background(250);
-  image(video, 0, 0, width, height);
+  image(video, 0, 0, width, height); // 顯示攝影機畫面
 
   if (!gameStarted) {
     showStartScreen();
@@ -314,51 +314,54 @@ function checkAction() {
   }
 }
 
-// 判斷是否為握拳動作
+// 判斷是否為握拳動作 (手背朝攝影機)
 function isFistClosed() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 大幅放寬閾值，讓握拳更容易被識別
-  const THRESHOLD_CURLED_Y = 15; // 尖端 Y 座標比 MCP Y 座標只要大一點點，就表示彎曲
-  const THUMB_CLOSE_THRESHOLD_X = 80; // 拇指尖到食指根部 X 距離，放寬以表示拇指只要稍微靠攏
-  const THUMB_CLOSE_THRESHOLD_Y = 0; // 拇指尖只要在拇指根部 Y 座標下方，就可能被視為彎曲
+  // 手背朝攝影機時，彎曲手指會讓指尖的 Y 座標相對**上升** (因為 Y 軸向下遞增)
+  // 且指尖會更靠近手腕
+  const THRESHOLD_CURLED_Y_OFFSET = -15; // 尖端 Y 座標比 MCP Y 座標**小於**此負值，表示彎曲向上
+  const THUMB_CLOSE_DISTANCE = 50; // 拇指尖與食指根部距離，放寬以表示收攏
 
-  // 1. 檢查四個手指是否彎曲 (尖端 Y 座標顯著低於 MCP 關節 Y 座標，因為 Y 軸向下遞增)
-  let indexCurled = landmarks[8][1] > landmarks[5][1] + THRESHOLD_CURLED_Y;
-  let middleCurled = landmarks[12][1] > landmarks[9][1] + THRESHOLD_CURLED_Y;
-  let ringCurled = landmarks[16][1] > landmarks[13][1] + THRESHOLD_CURLED_Y;
-  let pinkyCurled = landmarks[20][1] > landmarks[17][1] + THRESHOLD_CURLED_Y;
+  // 檢查四個手指是否彎曲 (尖端 Y 座標相對 MCP 關節的 Y 座標更高，即 Y 值更小)
+  let indexCurled = landmarks[8][1] < landmarks[5][1] + THRESHOLD_CURLED_Y_OFFSET;
+  let middleCurled = landmarks[12][1] < landmarks[9][1] + THRESHOLD_CURLED_Y_OFFSET;
+  let ringCurled = landmarks[16][1] < landmarks[13][1] + THRESHOLD_CURLED_Y_OFFSET;
+  let pinkyCurled = landmarks[20][1] < landmarks[17][1] + THRESHOLD_CURLED_Y_OFFSET;
 
-  // 2. 檢查拇指是否收攏或彎曲
-  let thumbClosed = (abs(landmarks[4][0] - landmarks[5][0]) < THUMB_CLOSE_THRESHOLD_X) &&
-                    (landmarks[4][1] > landmarks[1][1] + THUMB_CLOSE_THRESHOLD_Y); // 拇指尖Y比拇指根Y大
+  // 檢查拇指是否收攏或彎曲
+  // 拇指尖 (4) 應該靠近食指根部 (5) 或掌心 (0)
+  let thumbClose = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_DISTANCE ||
+                   dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_DISTANCE;
 
-  return indexCurled && middleCurled && ringCurled && pinkyCurled && thumbClosed;
+  return indexCurled && middleCurled && ringCurled && pinkyCurled && thumbClose;
 }
 
 
-// 判斷是否為攤開手掌的動作 (張開五隻手指)
+// 判斷是否為攤開手掌的動作 (張開五隻手指) (手背朝攝影機)
 function isOpenHand() {
   if (hands.length === 0 || hands[0].landmarks.length < 21) return false;
 
   let landmarks = hands[0].landmarks;
-  // 大幅放寬閾值，讓攤開手更容易被識別
-  const THRESHOLD_STRAIGHT_Y = 10; // 尖端 Y 座標比 MCP Y 座標只要小一點點，就表示伸直
-  const MIN_SPREAD_X = 10;         // 相鄰手指尖 X 座標間距最小要求，極度放寬
-  const MIN_FULL_SPREAD_X = 50;   // 食指尖到小指尖的總橫向距離，極度放寬
-  const THUMB_AWAY_FROM_PALM_X = 10; // 拇指尖到掌根 X 距離，只要稍微張開
+  // 手背朝攝影機時，伸直手指會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
+  const THRESHOLD_STRAIGHT_Y_OFFSET = 10; // 尖端 Y 座標比 MCP Y 座標**大於**此值，表示伸直
+  const MIN_SPREAD_X = 20;         // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開)
+  const MIN_FULL_SPREAD_X = 80;   // 食指尖到小指尖的總橫向距離 (判斷完全張開)
+  const THUMB_AWAY_DISTANCE = 70; // 拇指尖到掌根距離，表示拇指張開
 
   // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
-  // 尖端 Y 座標必須明顯高於 MCP 關節 Y 座標 (Y 軸向下遞增，所以高表示 Y 值小)
-  let indexStraight = landmarks[8][1] < landmarks[5][1] - THRESHOLD_STRAIGHT_Y;
-  let middleStraight = landmarks[12][1] < landmarks[9][1] - THRESHOLD_STRAIGHT_Y;
-  let ringStraight = landmarks[16][1] < landmarks[13][1] - THRESHOLD_STRAIGHT_Y;
-  let pinkyStraight = landmarks[20][1] < landmarks[17][1] - THRESHOLD_STRAIGHT_Y;
+  // 尖端 Y 座標必須明顯低於 MCP 關節 Y 座標 (Y 軸向下遞增，所以低表示 Y 值大)
+  let indexStraight = landmarks[8][1] > landmarks[5][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
+  let middleStraight = landmarks[12][1] > landmarks[9][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
+  let ringStraight = landmarks[16][1] > landmarks[13][1] + THRESHED_STRAIGHT_Y_OFFSET;
+  let pinkyStraight = landmarks[20][1] > landmarks[17][1] + THRESHOLD_STRAIGHT_Y_OFFSET;
 
   // 2. 檢查拇指是否伸直並遠離掌心
-  let thumbStraightAndSpread = (landmarks[4][1] < landmarks[1][1] - THRESHOLD_STRAIGHT_Y) &&
-                               (abs(landmarks[4][0] - landmarks[0][0]) > THUMB_AWAY_FROM_PALM_X);
+  // 拇指尖 (4) 的 Y 座標應明顯低於其根部 (1)
+  // 且拇指尖 (4) 應與掌根 (0) 有足夠的距離
+  let thumbStraightAndSpread = (landmarks[4][1] > landmarks[1][1] + THRESHOLD_STRAIGHT_Y_OFFSET) &&
+                               (dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) > THUMB_AWAY_DISTANCE);
 
   let allFingersStraight = indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraightAndSpread;
 
