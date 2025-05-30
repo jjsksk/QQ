@@ -1,27 +1,47 @@
 let video;
-let hands = [];      // 儲存手部偵測結果
+let hands = []; // 儲存手部偵測結果
 
 // 遊戲狀態變數
 let gameStarted = false; // 遊戲是否開始
 let gameModelsLoaded = false; // 所有 AI 模型是否載入完成
-let startTime;               // 遊戲開始時間
-let timeLeft = 60;         // 剩餘時間 (秒)
-let gameInterval;          // 倒數計時器的 interval ID
+let startTime; // 遊戲開始時間
+let timeLeft = 60; // 剩餘時間 (秒)
+let gameInterval; // 倒數計時器的 interval ID
 
 let nameList = [
-  "顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴", // 老師們
-  "馬嘉祺", "丁程鑫", "宋亞軒", "劉耀文", "張真源", "嚴浩翔", "賀峻霖"  // 非老師們
+  "顧大維",
+  "何俐安",
+  "黃琪芳",
+  "林逸農",
+  "徐唯芝",
+  "陳慶帆",
+  "賴婷鈴", // 老師們
+  "馬嘉祺",
+  "丁程鑫",
+  "宋亞軒",
+  "劉耀文",
+  "張真源",
+  "嚴浩翔",
+  "賀峻霖", // 非老師們
 ];
 // 淡江教科的老師們 (請確認此列表包含所有老師的名字)
-let teacherList = ["顧大維", "何俐安", "黃琪芳", "林逸農", "徐唯芝", "陳慶帆", "賴婷鈴"];
-let currentName = "";      // 目前顯示的人名
-let lastSwitchTime = 0;    // 上次切換人名的時間 (millis())
+let teacherList = [
+  "顧大維",
+  "何俐安",
+  "黃琪芳",
+  "林逸農",
+  "徐唯芝",
+  "陳慶帆",
+  "賴婷鈴",
+];
+let currentName = ""; // 目前顯示的人名
+let lastSwitchTime = 0; // 上次切換人名的時間 (millis())
 let switchInterval = 5000; // 每 5 秒切換一次人名 (5000 毫秒)
-let feedback = "";         // 顯示給玩家的回饋訊息
-let score = 0;             // 遊戲分數
+let feedback = ""; // 顯示給玩家的回饋訊息
+let score = 0; // 遊戲分數
 
 let boxSize = 200;
-let boxPulse = 0;          // 人名方塊的脈動效果
+let boxPulse = 0; // 人名方塊的脈動效果
 
 // 動作判斷狀態變數 (防止重複加減分)
 let actionCheckedForCurrentName = false; // 當前人名是否已檢查過動作並給分/扣分
@@ -29,21 +49,21 @@ let actionWindowActive = false; // 是否處於等待玩家動作的窗口期
 
 // 視覺回饋相關變數
 let showCorrectionMark = false; // 是否顯示打勾或打叉
-let correctionMarkType = '';    // 'check' 或 'cross'
-let correctionMarkPosition;      // 打勾或打叉的位置 (p5.Vector)
-let correctionMarkAlpha = 255;  // 打勾或打叉的透明度
+let correctionMarkType = ""; // 'check' 或 'cross'
+let correctionMarkPosition; // 打勾或打叉的位置 (p5.Vector)
+let correctionMarkAlpha = 255; // 打勾或打叉的透明度
 let correctionMarkDuration = 1000; // 打勾或打叉顯示時間 (毫秒)
-let correctionMarkStartTime;       // 打勾或打叉開始顯示的時間
+let correctionMarkStartTime; // 打勾或打叉開始顯示的時間
 
 // 偵測頻率控制變數
 let lastHandDetectTime = 0;
-let handDetectInterval = 50; // 更頻繁地偵測手勢 (約 20 FPS)
+let handDetectInterval = 100; // 降低偵測頻率以減少 CPU 負擔，但仍保持足夠響應 (約 10 FPS)
 
 // 新增：白線框的變數
 let detectionBoxX;
 let detectionBoxY;
-let detectionBoxWidth = 350; // 偵測框的寬度稍微增加
-let detectionBoxHeight = 350; // 偵測框的高度稍微增加
+let detectionBoxWidth = 400; // 偵測框的寬度稍微增加
+let detectionBoxHeight = 400; // 偵測框的高度稍微增加
 
 function setup() {
   createCanvas(640, 480);
@@ -60,7 +80,7 @@ function setup() {
 
   showStartScreen();
 
-  let startButton = select('#startButton');
+  let startButton = select("#startButton");
   if (startButton) {
     startButton.mousePressed(startGame);
   } else {
@@ -75,21 +95,21 @@ function showStartScreen() {
   textSize(32);
   text("準備開始...", width / 2, height / 2 - 50);
 
-  let startButton = select('#startButton');
+  let startButton = select("#startButton");
   if (startButton) {
-    startButton.style('display', 'block');
-    startButton.html('開始遊戲');
-    startButton.attribute('disabled', '');
+    startButton.style("display", "block");
+    startButton.html("開始遊戲");
+    startButton.attribute("disabled", "");
   }
 
   if (gameModelsLoaded) {
     if (startButton) {
-      startButton.html('模型載入完成，點擊開始');
-      startButton.removeAttribute('disabled');
+      startButton.html("模型載入完成，點擊開始");
+      startButton.removeAttribute("disabled");
     }
   } else {
     if (startButton) {
-      startButton.html('載入 AI 模型中...');
+      startButton.html("載入 AI 模型中...");
     }
   }
 }
@@ -97,16 +117,21 @@ function showStartScreen() {
 function videoReady() {
   console.log("攝影機成功啟動！");
 
+  // 初始化 handpose 模型，並設置在模型載入完成後觸發 checkModelsLoaded
   handpose = ml5.handpose(video, () => {
     console.log("Handpose model ready!");
     checkModelsLoaded();
   });
+
+  // 設定模型載入成功後，開始持續偵測手部
+  handpose.on("hand", (results) => {
+    hands = results;
+  });
 }
 
 function checkModelsLoaded() {
-  let handposeReady = handpose && handpose.ready;
-
-  if (handposeReady) {
+  // 檢查 handpose 模型是否真的載入完成
+  if (handpose && handpose.ready) {
     gameModelsLoaded = true;
     showStartScreen();
   }
@@ -135,9 +160,9 @@ function startGame() {
     }
   }, 1000);
 
-  let startButton = select('#startButton');
+  let startButton = select("#startButton");
   if (startButton) {
-    startButton.style('display', 'none');
+    startButton.style("display", "none");
   }
 }
 
@@ -150,13 +175,12 @@ function draw() {
   image(video, 0, 0, width, height);
   pop();
 
-
   if (!gameStarted) {
     showStartScreen();
     return;
   }
 
-  // 繪製白色偵測線框 - 讓它更明顯
+  // 繪製白色偵測線框
   noFill();
   stroke(255); // 白色
   strokeWeight(5); // 增加線條粗細
@@ -169,12 +193,13 @@ function draw() {
   let handInBox = false;
   if (hands.length > 0) {
     let wrist = hands[0].landmarks[0]; // 手腕關鍵點
-    // 由於攝影機畫面左右翻轉，手的座標也需要相對調整
-    // 然而，handpose偵測到的landmarks座標是基於翻轉後的畫面的，所以直接使用即可
-    if (wrist[0] > (detectionBoxX - detectionBoxWidth / 2) &&
-        wrist[0] < (detectionBoxX + detectionBoxWidth / 2) &&
-        wrist[1] > (detectionBoxY - detectionBoxHeight / 2) &&
-        wrist[1] < (detectionBoxY + detectionBoxHeight / 2)) {
+    // handpose偵測到的landmarks座標是基於翻轉後的畫面的，所以直接使用即可
+    if (
+      wrist[0] > detectionBoxX - detectionBoxWidth / 2 &&
+      wrist[0] < detectionBoxX + detectionBoxWidth / 2 &&
+      wrist[1] > detectionBoxY - detectionBoxHeight / 2 &&
+      wrist[1] < detectionBoxY + detectionBoxHeight / 2
+    ) {
       handInBox = true;
     }
   }
@@ -208,31 +233,22 @@ function draw() {
 
   // 優化偵測提示邏輯
   if (gameStarted && hands.length === 0) {
-      feedback = "🔍 請將手背完整地放入攝影機畫面中央！";
+    feedback = "🔍 請將手背完整地放入攝影機畫面中央！";
   } else if (gameStarted && hands.length > 0 && !handInBox) {
-      feedback = "⚠️ 請將手移入白色框內！";
-  } else if (gameStarted && feedback.includes("偵測中...請對準攝影機！")) {
-      // 如果之前顯示過「偵測中」且現在偵測到手了，就清除訊息，除非有其他訊息
-      feedback = "";
+    feedback = "⚠️ 請將手移入白色框內！";
+  } else if (gameStarted && hands.length > 0 && handInBox) {
+    // 只有當手在框內且偵測到手時，才檢查動作
+    if (actionWindowActive && !actionCheckedForCurrentName) {
+      checkAction();
+    }
+    if (feedback.includes("偵測中") || feedback.includes("請將手")) {
+      feedback = ""; // 清除提示，因為現在手已經被偵測到且在框內
+    }
   }
+
   text(feedback, width / 2, height - 10);
 
-  // 限制手勢偵測頻率
-  if (handpose && gameModelsLoaded && (millis() - lastHandDetectTime > handDetectInterval)) {
-    handpose.predict(video).then(results => {
-      hands = results;
-
-      // 在手部數據更新後立即嘗試檢查動作
-      // 只有當手在框內時才檢查動作
-      if (actionWindowActive && !actionCheckedForCurrentName && hands.length > 0 && handInBox) {
-        checkAction();
-      }
-    });
-    lastHandDetectTime = millis();
-  }
-
-
-  drawHandLandmarks(); // 只繪製手部關節點
+  drawHandLandmarks(); // 繪製手部關節點和連線
 
   if (showCorrectionMark) {
     let elapsed = millis() - correctionMarkStartTime;
@@ -240,16 +256,15 @@ function draw() {
       correctionMarkAlpha = map(elapsed, 0, correctionMarkDuration, 255, 0);
       push();
       // correctionMarkPosition的座標是基於原本的影像，如果影像翻轉了，則mark也要翻轉
-      // 因為drawHandLandmarks已經處理了翻轉，所以這裡直接使用即可
-      translate(correctionMarkPosition.x, correctionMarkPosition.y);
+      translate(width - correctionMarkPosition.x, correctionMarkPosition.y); // 因為顯示畫面左右翻轉，所以這裡也需要翻轉
       noFill();
       strokeWeight(5);
       stroke(0, 0, 255, correctionMarkAlpha);
 
-      if (correctionMarkType === 'check') {
+      if (correctionMarkType === "check") {
         line(-20, 0, 0, 20);
         line(0, 20, 40, -20);
-      } else if (correctionMarkType === 'cross') {
+      } else if (correctionMarkType === "cross") {
         line(-20, -20, 20, 20);
         line(-20, 20, 20, -20);
       }
@@ -286,11 +301,11 @@ function endGame() {
   actionWindowActive = false; // 遊戲結束時重置
   actionCheckedForCurrentName = false; // 遊戲結束時重置
 
-  let startButton = select('#startButton');
+  let startButton = select("#startButton");
   if (startButton) {
-    startButton.style('display', 'block');
-    startButton.html('重新開始遊戲');
-    startButton.removeAttribute('disabled');
+    startButton.style("display", "block");
+    startButton.html("重新開始遊戲");
+    startButton.removeAttribute("disabled");
   }
 }
 
@@ -305,25 +320,27 @@ function pickNewName() {
 // 檢查玩家動作並更新分數和回饋
 function checkAction() {
   // 只有在動作窗口開啟且該名字的動作尚未被檢查過時才執行
-  if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0) return false;
+  if (!actionWindowActive || actionCheckedForCurrentName || hands.length === 0)
+    return false;
 
   let handInBox = false;
   if (hands.length > 0) {
     let wrist = hands[0].landmarks[0];
-    if (wrist[0] > (detectionBoxX - detectionBoxWidth / 2) &&
-        wrist[0] < (detectionBoxX + detectionBoxWidth / 2) &&
-        wrist[1] > (detectionBoxY - detectionBoxHeight / 2) &&
-        wrist[1] < (detectionBoxY + detectionBoxHeight / 2)) {
+    if (
+      wrist[0] > detectionBoxX - detectionBoxWidth / 2 &&
+      wrist[0] < detectionBoxX + detectionBoxWidth / 2 &&
+      wrist[1] > detectionBoxY - detectionBoxHeight / 2 &&
+      wrist[1] < detectionBoxY + detectionBoxHeight / 2
+    ) {
       handInBox = true;
     }
   }
 
   // 如果手不在框內，則不進行手勢判斷
   if (!handInBox) {
-      feedback = "⚠️ 請將手移入白色框內！";
-      return false; // 不做任何判斷，等待手進入框內
+    feedback = "⚠️ 請將手移入白色框內！";
+    return false; // 不做任何判斷，等待手進入框內
   }
-
 
   let actionMade = false; // 判斷是否做了"任何"有效手勢 (握拳或攤開)
   let correctAction = false;
@@ -334,34 +351,44 @@ function checkAction() {
   const hasFist = isFistClosed();
   const hasOpenHand = isOpenHand();
 
-  // 如果同時偵測到兩種手勢，這可能是模糊情況，或兩者都不是明確的動作，可以考慮不做判斷或視為無效
   // 減少同時判斷為真導致的誤判，優先判斷是否明確做出其中一種手勢
+  // 如果兩種手勢同時被偵測到 (這不太可能在真實情況下發生，除非閾值非常寬鬆)，則認為不明確
   if (hasFist && hasOpenHand) {
-      feedback = "手勢模糊，請明確動作！";
-      return false; // 不給分也不扣分，等待更明確的動作
+    feedback = "手勢模糊，請明確動作！";
+    return false; // 不給分也不扣分，等待更明確的動作
   }
 
   if (isCurrentTeacher) {
     // 如果是教科老師，期望握拳
-    if (hasFist) { // 正確動作：握拳
+    if (hasFist) {
+      // 正確動作：握拳
       actionMade = true;
       correctAction = true;
-      score += (currentName === "陳慶帆" ? 2 : 1); // 陳慶帆老師答對加2分，其他老師加1分
-      feedback = (currentName === "陳慶帆") ? "👊 陳慶帆老師來了！握拳加倍加分！" : "👊 老師來了！握拳加分！";
-    } else if (hasOpenHand) { // 錯誤動作：攤開
+      score += currentName === "陳慶帆" ? 2 : 1; // 陳慶帆老師答對加2分，其他老師加1分
+      feedback =
+        currentName === "陳慶帆"
+          ? "👊 陳慶帆老師來了！握拳加倍加分！"
+          : "👊 老師來了！握拳加分！";
+    } else if (hasOpenHand) {
+      // 錯誤動作：攤開
       actionMade = true;
       correctAction = false;
-      score -= (currentName === "陳慶帆" ? 3 : 1); // 陳慶帆老師答錯扣3分，其他老師扣1分
-      feedback = (currentName === "陳慶帆") ? "😐 對陳慶帆老師要握拳才能加分喔！扣3分！" : "😐 對老師要握拳才能加分喔！扣1分！";
+      score -= currentName === "陳慶帆" ? 3 : 1; // 陳慶帆老師答錯扣3分，其他老師扣1分
+      feedback =
+        currentName === "陳慶帆"
+          ? "😐 對陳慶帆老師要握拳才能加分喔！扣3分！"
+          : "😐 對老師要握拳才能加分喔！扣1分！";
     }
   } else {
     // 如果不是教科老師，期望攤開手
-    if (hasOpenHand) { // 正確動作：攤開
+    if (hasOpenHand) {
+      // 正確動作：攤開
       actionMade = true;
       correctAction = true;
       feedback = "🖐️ 這不是老師，給他攤開手！加1分！";
       score += 1;
-    } else if (hasFist) { // 錯誤動作：握拳
+    } else if (hasFist) {
+      // 錯誤動作：握拳
       actionMade = true;
       correctAction = false;
       feedback = "👊 這時候要攤開手啦～扣1分！";
@@ -372,9 +399,10 @@ function checkAction() {
   // 如果成功偵測到任何有效動作，就給予回饋並標記已檢查
   if (actionMade) {
     actionCheckedForCurrentName = true; // 標記為已檢查，防止重複加減分
-    let wrist = hands[0].landmarks[0];  // 使用手腕作為回饋位置參考
+    let wrist = hands[0].landmarks[0]; // 使用手腕作為回饋位置參考
+    // 注意：因為畫面顯示是左右翻轉的，所以回饋標記的 X 座標也需要翻轉
     correctionMarkPosition = createVector(wrist[0], wrist[1] - 50);
-    correctionMarkType = correctAction ? 'check' : 'cross';
+    correctionMarkType = correctAction ? "check" : "cross";
     showCorrectionMark = true;
     correctionMarkStartTime = millis();
   }
@@ -389,23 +417,24 @@ function isFistClosed() {
   // 手背朝攝影機時，彎曲手指會讓指尖的 Y 座標相對**上升** (因為 Y 軸向下遞增)
   // 且指尖會更靠近手腕
   // 閾值已經設定得非常寬鬆，以便更容易偵測
-  const THRESHOLD_CURLED_Y_OFFSET = -5; // 尖端 Y 座標比 MCP Y 座標**小於**此負值，表示彎曲向上 (極為寬鬆)
-  const THUMB_CLOSE_DISTANCE = 60; // 拇指尖與食指根部距離，放寬以表示收攏
+  // 調整閾值，使其更靈敏地偵測握拳
+  const THRESHOLD_CURLED_Y_OFFSET = -10; // 指尖 Y 座標比 MCP Y 座標小於此負值，表示彎曲向上
+  const THUMB_CLOSE_DISTANCE = 50; // 拇指尖與食指根部或掌心距離，表示收攏
 
   // 檢查四個手指是否彎曲 (尖端 Y 座標相對 MCP 關節的 Y 座標更高，即 Y 值更小)
+  // 檢查指尖是否在對應指關節的上方 (Y值較小，因為Y軸向下)
   let indexCurled = landmarks[8][1] < landmarks[5][1] + THRESHOLD_CURLED_Y_OFFSET;
   let middleCurled = landmarks[12][1] < landmarks[9][1] + THRESHOLD_CURLED_Y_OFFSET;
   let ringCurled = landmarks[16][1] < landmarks[13][1] + THRESHOLD_CURLED_Y_OFFSET;
   let pinkyCurled = landmarks[20][1] < landmarks[17][1] + THRESHOLD_CURLED_Y_OFFSET;
 
   // 檢查拇指是否收攏或彎曲
-  // 拇指尖 (4) 應該靠近食指根部 (5) 或掌心 (0)
-  let thumbClose = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_DISTANCE ||
-                   dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_DISTANCE;
+  // 拇指尖 (4) 應該靠近食指根部 (5) 或掌心 (0) 的某個點
+  let thumbCloseToPalm = dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_DISTANCE;
+  let thumbCloseToIndex = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_DISTANCE;
 
-  return indexCurled && middleCurled && ringCurled && pinkyCurled && thumbClose;
+  return indexCurled && middleCurled && ringCurled && pinkyCurled && (thumbCloseToPalm || thumbCloseToIndex);
 }
-
 
 // 判斷是否為攤開手掌的動作 (張開五隻手指) (手背朝攝影機)
 function isOpenHand() {
@@ -414,10 +443,10 @@ function isOpenHand() {
   let landmarks = hands[0].landmarks;
   // 手背朝攝影機時，伸直手指會讓指尖的 Y 座標相對**下降** (Y 軸向下遞增)
   // 閾值已經設定得非常寬鬆，以便更容易偵測
-  const THRESHOLD_STRAIGHT_Y_OFFSET = 5; // 尖端 Y 座標比 MCP Y 座標**大於**此值，表示伸直 (極為寬鬆)
-  const MIN_SPREAD_X = 10;           // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，極度放寬)
-  const MIN_FULL_SPREAD_X = 40;    // 食指尖到小指尖的總橫向距離 (判斷完全張開，極度放寬)
-  const THUMB_AWAY_DISTANCE = 40; // 拇指尖到掌根距離，表示拇指張開 (極為寬鬆)
+  // 調整閾值，使其更靈敏地偵測攤開
+  const THRESHOLD_STRAIGHT_Y_OFFSET = 15; // 尖端 Y 座標比 MCP Y 座標大於此值，表示伸直 (稍微放寬)
+  const MIN_SPREAD_X = 20; // 相鄰手指尖 X 座標間距最小要求 (用於判斷張開，稍微放寬)
+  const THUMB_AWAY_DISTANCE = 60; // 拇指尖到掌根距離，表示拇指張開 (稍微放寬)
 
   // 1. 檢查所有手指（食指、中指、無名指、小指）是否伸直
   // 尖端 Y 座標必須明顯低於 MCP 關節 Y 座標 (Y 軸向下遞增，所以低表示 Y 值大)
@@ -429,23 +458,28 @@ function isOpenHand() {
   // 2. 檢查拇指是否伸直並遠離掌心
   // 拇指尖 (4) 的 Y 座標應明顯低於其根部 (1)
   // 且拇指尖 (4) 應與掌根 (0) 有足夠的距離
-  let thumbStraightAndSpread = (landmarks[4][1] > landmarks[1][1] + THRESHOLD_STRAIGHT_Y_OFFSET) &&
-                               (dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) > THUMB_AWAY_DISTANCE);
+  let thumbStraightAndSpread =
+    landmarks[4][1] > landmarks[1][1] + THRESHOLD_STRAIGHT_Y_OFFSET &&
+    dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) >
+      THUMB_AWAY_DISTANCE;
 
-  let allFingersStraight = indexStraight && middleStraight && ringStraight && pinkyStraight && thumbStraightAndSpread;
+  let allFingersStraight =
+    indexStraight &&
+    middleStraight &&
+    ringStraight &&
+    pinkyStraight &&
+    thumbStraightAndSpread;
 
   // 3. 檢查手指是否張開（橫向距離）
-  let fingersSpread = (abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X) && // 食指 vs 中指
-                      (abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X) && // 中指 vs 無名指
-                      (abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X); // 無名指 vs 小指
-
-  // 4. 檢查食指到小指的總橫向距離是否達到完全張開的程度
-  let fullSpreadX = abs(landmarks[8][0] - landmarks[20][0]) > MIN_FULL_SPREAD_X;
+  // 確保手指尖的 X 座標有足夠的差異
+  let fingersSpread =
+    abs(landmarks[8][0] - landmarks[12][0]) > MIN_SPREAD_X && // 食指 vs 中指
+    abs(landmarks[12][0] - landmarks[16][0]) > MIN_SPREAD_X && // 中指 vs 無名指
+    abs(landmarks[16][0] - landmarks[20][0]) > MIN_SPREAD_X; // 無名指 vs 小指
 
   // 綜合判斷：所有手指伸直 AND 手指之間有足夠的橫向張開距離
-  return allFingersStraight && fingersSpread && fullSpreadX;
+  return allFingersStraight && fingersSpread;
 }
-
 
 // 繪製手部關節點和連線 (淺綠色)
 function drawHandLandmarks() {
@@ -455,39 +489,151 @@ function drawHandLandmarks() {
       let landmark = hand.landmarks[j];
       fill(100, 255, 100); // 淺綠色
       noStroke();
-      ellipse(landmark[0], landmark[1], 8, 8);
+      // 因為攝影機畫面左右翻轉，所以繪製手部關鍵點時也需要翻轉 X 座標
+      ellipse(width - landmark[0], landmark[1], 8, 8);
     }
     stroke(100, 255, 100); // 淺綠色
     strokeWeight(2);
 
     // 連接手部骨架 (Handpose 的 landmark 索引有特定規則)
+    // 由於畫面左右翻轉，繪製線條時也需要對 X 座標進行翻轉
     // 拇指 (0-4)
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[1][0], hand.landmarks[1][1]);
-    line(hand.landmarks[1][0], hand.landmarks[1][1], hand.landmarks[2][0], hand.landmarks[2][1]);
-    line(hand.landmarks[2][0], hand.landmarks[2][1], hand.landmarks[3][0], hand.landmarks[3][1]);
-    line(hand.landmarks[3][0], hand.landmarks[3][1], hand.landmarks[4][0], hand.landmarks[4][1]);
+    line(
+      width - hand.landmarks[0][0],
+      hand.landmarks[0][1],
+      width - hand.landmarks[1][0],
+      hand.landmarks[1][1]
+    );
+    line(
+      width - hand.landmarks[1][0],
+      hand.landmarks[1][1],
+      width - hand.landmarks[2][0],
+      hand.landmarks[2][1]
+    );
+    line(
+      width - hand.landmarks[2][0],
+      hand.landmarks[2][1],
+      width - hand.landmarks[3][0],
+      hand.landmarks[3][1]
+    );
+    line(
+      width - hand.landmarks[3][0],
+      hand.landmarks[3][1],
+      width - hand.landmarks[4][0],
+      hand.landmarks[4][1]
+    );
     // 食指 (5-8)
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]); // 腕部到食指根部
-    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[6][0], hand.landmarks[6][1]);
-    line(hand.landmarks[6][0], hand.landmarks[6][1], hand.landmarks[7][0], hand.landmarks[7][1]);
-    line(hand.landmarks[7][0], hand.landmarks[7][1], hand.landmarks[8][0], hand.landmarks[8][1]);
+    line(
+      width - hand.landmarks[0][0],
+      hand.landmarks[0][1],
+      width - hand.landmarks[5][0],
+      hand.landmarks[5][1]
+    ); // 腕部到食指根部
+    line(
+      width - hand.landmarks[5][0],
+      hand.landmarks[5][1],
+      width - hand.landmarks[6][0],
+      hand.landmarks[6][1]
+    );
+    line(
+      width - hand.landmarks[6][0],
+      hand.landmarks[6][1],
+      width - hand.landmarks[7][0],
+      hand.landmarks[7][1]
+    );
+    line(
+      width - hand.landmarks[7][0],
+      hand.landmarks[7][1],
+      width - hand.landmarks[8][0],
+      hand.landmarks[8][1]
+    );
     // 中指 (9-12)
-    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[10][0], hand.landmarks[10][1]);
-    line(hand.landmarks[10][0], hand.landmarks[10][1], hand.landmarks[11][0], hand.landmarks[11][1]);
-    line(hand.landmarks[11][0], hand.landmarks[11][1], hand.landmarks[12][0], hand.landmarks[12][1]);
+    line(
+      width - hand.landmarks[9][0],
+      hand.landmarks[9][1],
+      width - hand.landmarks[10][0],
+      hand.landmarks[10][1]
+    );
+    line(
+      width - hand.landmarks[10][0],
+      hand.landmarks[10][1],
+      width - hand.landmarks[11][0],
+      hand.landmarks[11][1]
+    );
+    line(
+      width - hand.landmarks[11][0],
+      hand.landmarks[11][1],
+      width - hand.landmarks[12][0],
+      hand.landmarks[12][1]
+    );
     // 無名指 (13-16)
-    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[14][0], hand.landmarks[14][1]);
-    line(hand.landmarks[14][0], hand.landmarks[14][1], hand.landmarks[15][0], hand.landmarks[15][1]);
-    line(hand.landmarks[15][0], hand.landmarks[15][1], hand.landmarks[16][0], hand.landmarks[16][1]);
+    line(
+      width - hand.landmarks[13][0],
+      hand.landmarks[13][1],
+      width - hand.landmarks[14][0],
+      hand.landmarks[14][1]
+    );
+    line(
+      width - hand.landmarks[14][0],
+      hand.landmarks[14][1],
+      width - hand.landmarks[15][0],
+      hand.landmarks[15][1]
+    );
+    line(
+      width - hand.landmarks[15][0],
+      hand.landmarks[15][1],
+      width - hand.landmarks[16][0],
+      hand.landmarks[16][1]
+    );
     // 小指 (17-20)
-    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[18][0], hand.landmarks[18][1]);
-    line(hand.landmarks[18][0], hand.landmarks[18][1], hand.landmarks[19][0], hand.landmarks[19][1]);
-    line(hand.landmarks[19][0], hand.landmarks[19][1], hand.landmarks[20][0], hand.landmarks[20][1]);
+    line(
+      width - hand.landmarks[17][0],
+      hand.landmarks[17][1],
+      width - hand.landmarks[18][0],
+      hand.landmarks[18][1]
+    );
+    line(
+      width - hand.landmarks[18][0],
+      hand.landmarks[18][1],
+      width - hand.landmarks[19][0],
+      hand.landmarks[19][1]
+    );
+    line(
+      width - hand.landmarks[19][0],
+      hand.landmarks[19][1],
+      width - hand.landmarks[20][0],
+      hand.landmarks[20][1]
+    );
     // 手掌連接 (基於腕部和指根的連接)
-    line(hand.landmarks[0][0], hand.landmarks[0][1], hand.landmarks[5][0], hand.landmarks[5][1]);
-    line(hand.landmarks[5][0], hand.landmarks[5][1], hand.landmarks[9][0], hand.landmarks[9][1]);
-    line(hand.landmarks[9][0], hand.landmarks[9][1], hand.landmarks[13][0], hand.landmarks[13][1]);
-    line(hand.landmarks[13][0], hand.landmarks[13][1], hand.landmarks[17][0], hand.landmarks[17][1]);
-    line(hand.landmarks[17][0], hand.landmarks[17][1], hand.landmarks[0][0], hand.landmarks[0][1]);
+    line(
+      width - hand.landmarks[0][0],
+      hand.landmarks[0][1],
+      width - hand.landmarks[5][0],
+      hand.landmarks[5][1]
+    );
+    line(
+      width - hand.landmarks[5][0],
+      hand.landmarks[5][1],
+      width - hand.landmarks[9][0],
+      hand.landmarks[9][1]
+    );
+    line(
+      width - hand.landmarks[9][0],
+      hand.landmarks[9][1],
+      width - hand.landmarks[13][0],
+      hand.landmarks[13][1]
+    );
+    line(
+      width - hand.landmarks[13][0],
+      hand.landmarks[13][1],
+      width - hand.landmarks[17][0],
+      hand.landmarks[17][1]
+    );
+    line(
+      width - hand.landmarks[17][0],
+      hand.landmarks[17][1],
+      width - hand.landmarks[0][0],
+      hand.landmarks[0][1]
+    );
   }
 }
