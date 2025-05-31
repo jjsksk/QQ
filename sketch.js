@@ -405,11 +405,12 @@ function isFistClosed() {
   // 並確保拇指靠近掌心或食指根部。
 
   // 閾值設定，這些需要根據實際測試調整
-  const FINGER_CURLED_Y_OFFSET = 30; // 指尖 Y 座標比其 MCP 關節 Y 座標**大於**此值 (向下彎曲，靠近畫面下方)
-  const FINGER_CURLED_X_OFFSET = 25; // 指尖 X 座標與其 MCP 關節 X 座標的最大絕對差值 (向內收縮)
-  const THUMB_CLOSE_TO_PALM_DIST = 60; // 拇指尖到手腕或食指根部的距離
+  // 你的新閾值
+  const FINGER_CURLED_Y_OFFSET = -5; // 指尖 Y 座標比其 MCP 關節 Y 座標**小於**此值 (向上彎曲)
+  const FINGER_CURLED_X_OFFSET = 10; // 指尖 X 座標與其 MCP 關節 X 座標的最大絕對差值 (向內收縮)
+  const THUMB_CLOSE_DISTANCE = 50; // 拇指尖到手腕或食指根部的距離
 
-  let allFingersCurledOrClose = true;
+  let allFingersCurled = true;
 
   // 檢查食指、中指、無名指、小指
   // 遍歷食指(5-8)、中指(9-12)、無名指(13-16)、小指(17-20)
@@ -418,24 +419,24 @@ function isFistClosed() {
     let mcpIndex = 5 + i * 4;
     let tipIndex = 8 + i * 4;
 
-    // 判斷指尖是否向下彎曲（Y值較大）且水平距離不遠
+    // 判斷指尖是否向上彎曲（Y值較小）且水平距離不遠
     if (
       !(
-        landmarks[tipIndex][1] > landmarks[mcpIndex][1] - FINGER_CURLED_Y_OFFSET && // 指尖Y比MCP的Y大（更下方或靠近）
+        landmarks[tipIndex][1] < landmarks[mcpIndex][1] + FINGER_CURLED_Y_OFFSET && // 指尖Y比MCP的Y小（更上方）
         abs(landmarks[tipIndex][0] - landmarks[mcpIndex][0]) < FINGER_CURLED_X_OFFSET // 指尖X靠近MCP的X
       )
     ) {
-      allFingersCurledOrClose = false;
+      allFingersCurled = false;
       break; // 有一個手指不符合就不是握拳
     }
   }
 
   // 檢查拇指是否收攏靠近掌心
-  let thumbIsClose =
-    dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) < THUMB_CLOSE_TO_PALM_DIST || // 拇指尖到手腕
-    dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < THUMB_CLOSE_TO_PALM_DIST; // 拇指尖到食指根部
+  let thumbToPalm = dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]);
+  let thumbToIndexBase = dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]);
+  let thumbClose = thumbToPalm < THUMB_CLOSE_DISTANCE || thumbToIndexBase < THUMB_CLOSE_DISTANCE;
 
-  return allFingersCurledOrClose && thumbIsClose;
+  return allFingersCurled && thumbClose;
 }
 
 
@@ -446,52 +447,36 @@ function isOpenHand() {
   let landmarks = hands[0].landmarks;
 
   // 攤開手掌判斷邏輯：
-  // 檢查所有指尖點 (4, 8, 12, 16, 20) 是否都比對應的掌指關節 (MCP) 更遠離手腕 (Y 值更小)
-  // 且手指之間有足夠的 X 軸間距
-  // 確保拇指遠離掌心。
+  // 檢查是否每根手指都伸展 (TIP 的 Y 值小於 MCP，並且距離足夠遠)
+  // 這裡假設手是直立的，指尖的 Y 值會比掌指關節小 (在畫面上更上方)
+  // 並且指尖到掌指關節的距離要足夠長，表示伸直
 
-  // 閾值設定，這些需要根據實際測試調整
-  const FINGER_STRAIGHT_Y_DIST = 50; // 指尖 Y 座標比其 MCP 關節 Y 座標**小於**此值 (向上伸直，遠離畫面下方)
-  const MIN_FINGER_SPREAD_X = 35; // 相鄰手指尖 X 座標間距的最小閾值 (用於判斷手指張開程度)
-  const THUMB_AWAY_FROM_PALM_DIST = 80; // 拇指尖到手腕的最小距離
+  // 閾值需要根據實際測試調整
+  const FINGER_STRAIGHT_Y_OFFSET = 50; // 指尖 Y 座標比其 MCP 關節 Y 座標**小於**此值 (向上伸直)
+  const MIN_FINGER_TIP_DISTANCE = 40; // 指尖到其 MCP 關節的最小距離 (確保伸直)
+  const THUMB_AWAY_FROM_PALM_DIST = 40; // 拇指尖到手腕的最小距離 (確保張開)
 
   let allFingersStraight = true;
 
-  // 檢查食指、中指、無名指、小指是否伸直
+  // 檢查食指、中指、無名指、小指
   for (let i = 0; i < 4; i++) {
-    let mcpIndex = 5 + i * 4;
-    let tipIndex = 8 + i * 4;
+    let mcpIndex = 5 + i * 4; // 掌指關節
+    let tipIndex = 8 + i * 4; // 指尖
 
     // 判斷指尖是否向上伸直（Y值較小）且與MCP的距離足夠遠
     if (
-      !(landmarks[tipIndex][1] < landmarks[mcpIndex][1] - FINGER_STRAIGHT_Y_DIST) // 指尖Y明顯高於MCP的Y (向上伸直)
+      !(landmarks[tipIndex][1] < landmarks[mcpIndex][1] - FINGER_STRAIGHT_Y_OFFSET) || // 指尖Y明顯高於MCP的Y (向上伸直)
+      !(dist(landmarks[tipIndex][0], landmarks[tipIndex][1], landmarks[mcpIndex][0], landmarks[mcpIndex][1]) >= MIN_FINGER_TIP_DISTANCE)
     ) {
       allFingersStraight = false;
-      break; // 有一個手指不符合就不是攤開
-    }
-  }
-
-  // 檢查手指是否張開（橫向距離）
-  let fingersSpread = true;
-  // 檢查拇指與食指根部之間的距離
-  if (dist(landmarks[4][0], landmarks[4][1], landmarks[5][0], landmarks[5][1]) < MIN_FINGER_SPREAD_X * 1.2) {
-      fingersSpread = false;
-  }
-  // 檢查其他相鄰手指尖的 X 座標是否有足夠的差異
-  for (let i = 0; i < 3; i++) {
-    let tip1Index = 8 + i * 4;
-    let tip2Index = 12 + i * 4;
-    if (abs(landmarks[tip1Index][0] - landmarks[tip2Index][0]) < MIN_FINGER_SPREAD_X) {
-      fingersSpread = false;
       break;
     }
   }
 
-  // 檢查拇指是否張開並遠離掌心
+  // 拇指應該遠離掌心
   let thumbAway = dist(landmarks[4][0], landmarks[4][1], landmarks[0][0], landmarks[0][1]) > THUMB_AWAY_FROM_PALM_DIST;
 
-  // 綜合判斷：所有手指伸直且張開，且拇指遠離掌心
-  return allFingersStraight && fingersSpread && thumbAway;
+  return allFingersStraight && thumbAway;
 }
 
 
