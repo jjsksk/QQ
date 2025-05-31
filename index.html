@@ -1,35 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>淡江教科老師們</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handpose Game</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.dom.min.js"></script>
+
     <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
-    <style>
-      body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        margin: 0;
-        background-color: #f0f0f0;
-        flex-direction: column;
-      }
-      canvas {
-        border: 2px solid #333;
-      }
-      #startButton {
-        margin-top: 20px;
-        padding: 10px 20px;
-        font-size: 24px;
-        cursor: pointer;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="sketch-container"></div>
-    <button id="startButton">開始遊戲</button>
+
     <script src="sketch.js"></script>
-  </body>
+
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            flex-direction: column; /* To stack canvas and button */
+        }
+        canvas {
+            display: block;
+            border: 1px solid black;
+        }
+        #startButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button id="startButton"></button>
+</body>
 </html>
