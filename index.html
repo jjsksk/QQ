@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Handpose Game</title>
+    <title>手勢辨識遊戲</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.dom.min.js"></script>
@@ -20,17 +20,39 @@
             align-items: center;
             min-height: 100vh;
             background-color: #f0f0f0;
-            flex-direction: column; /* To stack canvas and button */
+            flex-direction: column; /* 讓畫布和按鈕垂直排列 */
+            font-family: Arial, sans-serif;
         }
         canvas {
             display: block;
-            border: 1px solid black;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         #startButton {
             margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 20px;
+            padding: 12px 25px;
+            font-size: 24px;
+            font-weight: bold;
             cursor: pointer;
+            background-color: #4CAF50; /* 綠色 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        #startButton:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        #startButton:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+        }
+        #startButton:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            box-shadow: none;
         }
     </style>
 </head>
